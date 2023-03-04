@@ -1,8 +1,8 @@
 ## bones syntax for programmers
 
-Bones syntax is based on Smalltalk (“In contrast, the Smalltalk syntax which ObjC is based on incubated ~10 years 
-at Xerox PARC in Alan Kay’s Learning Research Group, which was focused on making the computer accessible as a 
-problem-solving tool for _**children and non-programmer adults**_.”) and q/kdb.
+Bones syntax is based on Smalltalk and q/kdb. (“In contrast, the Smalltalk syntax which ObjC is based on incubated 
+for 10 years at Xerox PARC in Alan Kay’s Learning Research Group, and focused on making the computer accessible as a 
+problem-solving tool for _**children and non-programmer adults**_.”).
 
 
 At a high level the syntax is structured as lists of phrases.
@@ -21,18 +21,17 @@ _verbs_ may be called / applied in one of three forms:
 2) key-word form, e.g. `noun1 ifTrue: noun2 ifFalse: noun3` a la Smalltalk [^2] - same as `ifTrue:ifFalse:(noun1, noun2, noun3)` 
 3) pipeline form
 
-Syntacially _phrase-fragments_ come in six pipeline forms:
+Syntacially _phrase-fragments_ come in five pipeline forms:
 
 - _noun unary_ - same as `unary(noun)`
 - _noun1 binary noun2_ - same as `binary(noun1, noun2)`
 - _noun1 ternary noun2 noun3_ - same as `ternary(noun1, noun2, noun3)`
-- _rau noun_ - same as `rau(noun)` - where "rau" stands for right-associative-unary
 - _noun noun_ - i.e. vector based, e.g. `("a","b","c") 2 == "b"` or `("a","b","c") (1,2) == ("a", "b")`
-- _nullary_ - this form prevents a verb from consuming nouns from the pipeline and may only be called `nullary()`
+- _nullary_ - this form prevents a verb from consuming nouns from the pipeline and may only be called as `nullary()`
 
 _phrase-fragments_ are read left to right and both the human and the parser have to know the style each 
-verb takes (_unary, binary, ternary, rau_ or _nullary_). It is believed that this sort of contextualisation is more human 
-friendly than the usual mathematically based call / application style.
+verb takes (_unary, binary, ternary, rau_ or _nullary_). It is believed that this sort of contextualisation is more 
+human friendly than the usual mathematically based call / application style.
 
 A _phrase-fragment_ returns a noun which is passed to the next phrase fragment, thus `1 fred joe sally` is:
 
@@ -50,7 +49,7 @@ though to the next part of the phrase. E.g.
 1 :a + 1 :b
 ```
 results in `a == 1` and `b == 2`.\
-`b: 1 :a + 1` allows the name to come brefore the _:_ and is syntactic sugar for the above.
+`b: 1 :a + 1` allows the name to come before the _:_ and is syntactic sugar for the above.
 
 _type-exprs_, e.g. `<:type>`, may follow any noun and are used to tell bones the noun's type. Nouns may be 
 cast if their underlying memory structure is identical, for example, `myLifeSaving: 100.0 <:gbp>`. If the underlying 
@@ -59,15 +58,126 @@ memory structure is not identical then a type error is flagged.
 
 <br>
 
-### List
+### Lists of phrases
 
-**snippet** - _dot_ separated list (where _dot_ is either an actual `.` or a new line without indentation), e.g.
+**snippet** phrases can be separated by _dot_s or new-lines where the subsequent lines are on the same indentation 
+level, for example.
+```
+load "adding_library". from adding_library import +. a: 1. b: 2. a + b
+```
+
+is the same list of five phrases as
+
 ```
 load "adding_library"
 from adding_library import +
-a: 1. b: 2
+a: 1
+b: 2
 a + b
 ```
+
+
+**indentation**
+
+variation 1
+```
+fred with: joe squared
+  and: sally
+    plusAnother
+```
+
+is 
+
+```
+with:and:(fred, joe squared, sally plusAnother)
+```
+
+as is
+```
+fred 
+  with: joe 
+    squared
+  and: sally
+    plusAnother
+```
+
+variation 2
+
+```
+fred with: joe squared
+  and: sally
+  plusAnother
+```
+
+is an error
+
+variation 3
+```
+fred with: joe squared
+  and: sally
+plusAnother
+```
+
+is
+```
+with:and:(fred, joe squared, sally)
+plusAnother
+```
+
+variation 4
+```
+fred with: joe
+  squared
+and: sally
+plusAnother
+```
+
+is
+
+```
+with:(fred, joe squared)
+and: sally
+plusAnother
+```
+
+variation 5 - with add and times being binary
+
+```
+1 add 1
+  times 3
+    squared
+```
+
+is
+
+```
+times(add(1, 1), 3) squared
+```
+
+as is
+
+```
+1 add 1 times 3 squared
+```
+
+as is
+
+```
+1 add 1
+  times 3
+  squared
+```
+
+as is
+
+```
+1 
+  add 1
+  times 3
+    squared
+```
+
+
 
 **function**
 ```
@@ -75,14 +185,22 @@ a + b
 ```
 where
 - ... is a snippet
-- types are optional - inferred staticaly if absent
+- types are optional - inferred statically if absent
 - parameter names list (i.e. the `[...]` immediately following the opening `{`) is optional but if not given the 
-  parameters can be only one letter long and the order they are passed in is asummed to follow Oxford Dictionary order 
+  parameters can be only one letter long and the order they are passed in is assumed to follow Oxford Dictionary order 
   (i.e. "A" comes before "a" which comes before "b" and so on).
 
 So for example, `{y + x}` is the same as `{[x, y] y + x}`.
 
-**tuple** - semi-colon separated list of comma separated lists of phrase
+**1D tuple** - comma separated list of phrases
+```
+( 
+  1, 1+1, 3,
+  4, 5, 13 - 1 / 2
+)
+```
+
+**2D tuple** - semi-colon separated list of comma separated lists of phrase
 ```
 ( 
   1,2,3;
@@ -90,7 +208,47 @@ So for example, `{y + x}` is the same as `{[x, y] y + x}`.
 )
 ```
 
-**block** - semi-colon separated list of comma separated lists of dot separated lists of phrases
+this is an error 
+
+```
+( 
+  1,2,3
+  4,5,6
+)
+```
+
+as commas can't appear in snippets and snippets can't appear in tuples
+
+`()` and `(1)` at first blush could either be a list of arguments for a function call or tuples of size 0 and 1 
+respectively. As it turns out, this can always be resolved unambiguously. 
+
+Size one tuples are considered parenthetical.
+
+```
+(1) fred == fred(1)
+
+2 * (1 + 2) == 6
+```
+
+so function calls must be made to create lists of one
+
+```
+1 enlist fred
+
+2 * (1 + 2 enlist)
+```
+
+
+**1D block** - separated lists of dot separated lists of phrase
+```
+[
+    "a", b:1 + 1. c * 2,
+    "b", d:2 + 2. d * d,
+    5
+]
+```
+
+**2D block** - semi-colon separated list of comma separated lists of dot separated lists of phrase
 ```
 [
     "a", b:1 + 1. c * 2;
@@ -100,8 +258,8 @@ So for example, `{y + x}` is the same as `{[x, y] y + x}`.
 ```
 
 
-blocks have deferred execution but don't create a new context (aka environment) of variables and they can take 
-parameters:
+blocks have deferred execution but don't create a new context (aka environment) of variables and they can take (but 
+not like functions infer) parameters:
 
 ```
 [[name1:type1, name2:type2] <:return type> ...]
@@ -110,7 +268,7 @@ parameters:
 Example putting these together:
 
 ```
-((1,2,3) map: [[e] e + 1]) collect {x + 1) == (3,4,5)
+((1,2,3) map: [[e] e + 1]) collect {x + 1} == (3,4,5)
 ```
 
 `collect` is a binary and is the Smalltalk equivalent to `map`. Note keyword style requires extra parentheses in a 
@@ -122,13 +280,14 @@ compound phrase.
 {name1: value1, name2: value2}
 ```
 
-**panel**
+**frame**
 ```
+([comma separated list of bindings] comma separated list of bindings)
 ([] a: (1,2,3), b: ("one", "two", "three"))
 ([a: (1,2,3)] b: ("one", "two", "three"))
 ```
 
-result in a panel
+result in a frame
 
 | a   | b       |
 |-----|---------|
@@ -136,7 +295,7 @@ result in a panel
 | 2   | "two"   |
 | 3   | "three" |
 
-where the second syntax results in a panel with an index of a which can also be accessed like any other column.
+where the second syntax results in a frame with an index of a which can also be accessed like any other column.
 
 **early-exit**
 

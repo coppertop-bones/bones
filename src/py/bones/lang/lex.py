@@ -8,8 +8,9 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 import re, collections, itertools
-from bones.core.errors import ProgrammerError
-from bones.core.errors import SpellingError
+from bones.core.errors import ProgrammerError, SpellingError, ErrSite, handlersByErrSiteId, NotYetImplemented
+from bones.core.sentinels import Missing
+
 
 _tagIdSeed = itertools.count(start=0)
 
@@ -26,8 +27,8 @@ INLINE_COMMENT = next(_tagIdSeed)
 BREAKOUT = next(_tagIdSeed)
 CONTINUATION = next(_tagIdSeed)
 
-# CONDITIONAL
-CONDITIONAL = next(_tagIdSeed)
+# CONDITIONAL_COMMENT
+CONDITIONAL_COMMENT = next(_tagIdSeed)
 
 # SEPARATORS
 COLON = next(_tagIdSeed)
@@ -122,7 +123,7 @@ prettyNameByTag = [''] *_NUM_TAGS
 prettyNameByTag[LINE_COMMENT] = 'LINE_COMMENT'
 prettyNameByTag[INLINE_COMMENT] = 'INLINE_COMMENT'
 prettyNameByTag[BREAKOUT] = 'BREAKOUT'
-prettyNameByTag[CONDITIONAL] = 'CONDITIONAL'
+prettyNameByTag[CONDITIONAL_COMMENT] = 'CONDITIONAL_COMMENT'
 prettyNameByTag[COLON] = 'COLON'
 prettyNameByTag[COMMA] = 'COMMA'
 prettyNameByTag[SEMI_COLON] = 'SEMI_COLON'
@@ -326,7 +327,7 @@ _bonesLexRules = [
         r"(\}\')", BREAKOUT
     ),
     (r"(/-)(([\S\s]*)-/)", INLINE_COMMENT),                 # /-...-/               https://regex101.com/r/5FUfMm/1
-    (r"(/\!)(([\S\s]*)\!/)", CONDITIONAL),                  # /!...!/               https://regex101.com/r/5WCGml/1
+    (r"(/\!)(([\S\s]*)\!/)", CONDITIONAL_COMMENT),          # /!...!/               https://regex101.com/r/5WCGml/1
     (r'\/\/[^\n]*', LINE_COMMENT),                          # //...\n
     (r'[\n]+', LINE_BREAK),
     (r'(\")(([\S\s]*?[^\\](\\\\)*))\1', TEXT),
@@ -595,7 +596,9 @@ def lexBonesSrc(srcId, src):
                 break
         if (ILLEGAL1 <= tag and tag <= ILLEGAL2):
             token = tokens[-1]
-            raise SpellingError(f'Illegal token: {token.src} @line {token.l1}:  {lines[token.l1].src}')
+            raise SpellingError(f'Illegal token: {token.src} @line {token.l1}:  {lines[token.l1].src}', ErrSite('illegal tag'))
+        if tag == CONDITIONAL_COMMENT:
+            raise NotYetImplemented('this will need handling at the lex stage')
         if not match:
             width = len(str(l2))
             print("Understood the source code upto this point - syntax error after shortly after:")
@@ -603,8 +606,14 @@ def lexBonesSrc(srcId, src):
             print(f"{str(l2 - 1).rjust(width)} {lines[l2 - 1].src}")
             print(f"{str(l2 - 0).rjust(width)} {lines[l2 - 0].src}")
             print(" "*width+"  "+ " " *(c2-1) + "^")
-            raise SpellingError(f'Illegal character: {src[pos:pos+1]} @line {l2}:  {lines[l2].src}')
+            raise SpellingError(f'Illegal character: {src[pos:pos+1]} @line {l2}:  {lines[l2].src}', ErrSite('no match'))
         pos = match.end()
         priorTag = tag
 
     return tokens, lines
+
+
+handlersByErrSiteId.update({
+    ('bones.lang.lex', Missing, 'lexBonesSrc', 'illegal tag') : '...',
+    ('bones.lang.lex', Missing, 'lexBonesSrc', 'no match') : '...',
+})
