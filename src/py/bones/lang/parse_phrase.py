@@ -4,6 +4,9 @@
 # **********************************************************************************************************************
 
 import sys
+
+import bones.lang.types
+
 if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
@@ -29,13 +32,14 @@ from bones.lang.parse_structure import \
     FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
 from bones.lang.ctx import VMeta, FnMeta
 from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet, apply, bfunc, load, fromimport, \
-    bindfn, getfamily, assumedfunc, litstruct, littup, getsubvalname, getsubvalindex
+    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getsubvalname, getsubvalindex
 from bones.lang.metatypes import BTTuple, BTStruct
 from bones.lang.ctx import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, newFnCtx, ArgCatcher
-from bones.lang.types import TBI, bstruct, btup
+from bones.lang.types import TBI
 from bones.lang.parse_structure import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, ASSIGN_LEFT, UNARY_OR_STRUCT
 from bones.lang.parse_type_lang import parseTypeLang
+from bones.lang.structs import tv
 
 
 def parseSnippet(snippetGroup, ctx, k):
@@ -453,10 +457,10 @@ def parsePhrase(tokens, ctx, k):
                         node = parsePhrase([v], ctx, k)
                         vs.append(node)
                         ts.append(node.tOut)
-                    tStruct = BTStruct(names, ts)
-                    tv = bstruct(tStruct, dict(zip(names, vs)))
+                    tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
+                    tvObj = tv(tStruct, dict(zip(names, vs)))
                     tokens >> 1
-                    lhs = litstruct(t.tok1, t.tok2, ctx, tv)
+                    lhs = litstruct(t.tok1, t.tok2, ctx, tvObj)
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:
                     raise NotYetImplemented()
                 else:
