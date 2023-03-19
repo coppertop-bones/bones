@@ -235,7 +235,7 @@ from coppertop.pipe import coppertop
 from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented
 from bones.core.sentinels import Missing
 from bones.core.errors import ErrSite
-from bones.core.errors import ParagraphError
+from bones.core.errors import GroupError
 
 from bones.lang.lex import prettyNameByTag, Token, \
     L_ANGLE_COLON, L_PAREN, L_BRACKET, L_BRACE, R_ANGLE, R_PAREN, R_BRACKET, \
@@ -360,7 +360,7 @@ def parseStructure(tokens, TRACE=False):
                         # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
                         print(f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}')
                         got = prettyNameByTag[token.tag]
-                        raise ParagraphError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
+                        raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
                     consumer = currentTG
                     if TRACE:
                         print(f"{currentTG.PPDebug} << {PPDebug(token)} .3")
@@ -384,7 +384,7 @@ def parseStructure(tokens, TRACE=False):
                     # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
                     print(f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}')
                     got = prettyNameByTag[token.tag]
-                    raise ParagraphError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
+                    raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
                 consumer = currentTG
             if opener:
                 consumer = opener(token, currentTG, stack)
@@ -394,7 +394,7 @@ def parseStructure(tokens, TRACE=False):
                         print(f"{currentTG.PPDebug} << {PPDebug(token)} .5")
 
         if consumer is Missing:
-            raise ParagraphError('Unhandled token %s' % str(token), ErrSite("Unhandled token"), currentTG, token)
+            raise GroupError('Unhandled token %s' % str(token), ErrSite("Unhandled token"), currentTG, token)
 
         # pop groups off the stack that have finished consuming tokens
         while currentTG._tokens is Missing:
@@ -492,7 +492,7 @@ class _Group(object):
             # check we are NOT at start of phrase
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
-                raise ParagraphError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
+                raise GroupError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
             self._appendToken(tokenOrGroup, indent)
 
         else:
@@ -684,7 +684,7 @@ class _Phrases(_Group):
                     pass
                 else:
                     if not self._allowNLPhraseStart:
-                        raise ParagraphError(
+                        raise GroupError(
                             f'Illegal new line',
                             ErrSite(self.__class__, 'Illegal new line'),
                             self, tokenOrGroup
@@ -707,7 +707,7 @@ class _Phrases(_Group):
                     self._phrases << Missing
                     self._numEmpty += 1
                 elif self._emptyPolicy == ERR_ON_EMPTY:
-                    raise ParagraphError(
+                    raise GroupError(
                         f'Illegal empty phrase',
                         ErrSite(self.__class__, 'Illegal empty phrase'),
                         self, tokenOrGroup
@@ -852,13 +852,13 @@ def _procesAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGrou
     if len(phrase) == 1:
         if isinstance(phrase[0], Token):
             if phrase[0].tag == ASSIGN_LEFT:
-                raise ParagraphError("Syntax error")
+                raise GroupError("Syntax error")
             elif phrase[0].tag == CONTEXT_ASSIGN_LEFT:
-                raise ParagraphError("Syntax error")
+                raise GroupError("Syntax error")
             elif phrase[0].tag == GLOBAL_ASSIGN_LEFT:
-                raise ParagraphError("Syntax error")
+                raise GroupError("Syntax error")
             elif isinstance(phrase[0], TupParenOrDestructureGroup) and phrase[0]._isDestructure:
-                raise ParagraphError("Syntax error")
+                raise GroupError("Syntax error")
 
     elif len(phrase) >= 2:
         if isinstance(phrase[0], Token):
@@ -906,7 +906,7 @@ def _procesAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGrou
         elif isinstance(each, TupParenOrDestructureGroup) and each._isDestructure:
             numNames += len(each.grid[0])
     if exactlyOneNameInPhrase and numNames != 1:
-        raise ParagraphError(
+        raise GroupError(
             f"Exactly one name must be provided, but {numNames} were found",
             ErrSite('exactlyOneNameInPhrase and numNames != 1'),
             group, tokenOrGroup
@@ -932,13 +932,13 @@ class SnippetGroup(_Phrases):
         self._finishPhrase(Missing, SECTION_END, tokenOrGroup)
         super()._finalise(tokenOrGroup)
     def _commaEncountered(self, tokenOrGroup):
-        raise ParagraphError(
+        raise GroupError(
             f'COMMA not valid in snippet - {tokenOrGroup.l1}:{tokenOrGroup.l2}',
             ErrSite(self.__class__, 'COMMA not valid in snippet'),
             self, tokenOrGroup
         )
     def _semicolonEncountered(self, tokenOrGroup):
-        raise ParagraphError(
+        raise GroupError(
             f'SEMI_COLON not valid in snippet - {tokenOrGroup.l1}:{tokenOrGroup.l2}',
             ErrSite(self.__class__, 'SEMI_COLON not valid in snippet'),
             self, tokenOrGroup
@@ -1118,7 +1118,7 @@ class FuncOrStructGroup(_Phrases):
             self._hasDot                                        # has a dot so it's a function
         ):
             print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
-            raise ParagraphError(
+            raise GroupError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in function body"),
                 self, tokenOrGroup
@@ -1128,7 +1128,7 @@ class FuncOrStructGroup(_Phrases):
                 self._tokens[0].tag != ASSIGN_LEFT           # having a comma without an assign left is illegal
         ):
             print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
-            raise ParagraphError(
+            raise GroupError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in {}"),
                 self, tokenOrGroup
@@ -1140,7 +1140,7 @@ class FuncOrStructGroup(_Phrases):
 
     def _semicolonEncountered(self, tokenOrGroup):
         print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
-        raise ParagraphError(
+        raise GroupError(
             "Semi-colon encountered in function body",
             ErrSite(self.__class__, "illegal SEMI_COLON in function body"),
             self, tokenOrGroup
@@ -1153,7 +1153,7 @@ class FuncOrStructGroup(_Phrases):
         isAssignLeft = currentPhrase and isinstance(currentPhrase[0], Token) and currentPhrase[0].tag == ASSIGN_LEFT
         numPhrases = (1 if currentPhrase else 0) + len(self._phrases)
         if numPhrases == 0:
-            raise ParagraphError(
+            raise GroupError(
                 "empty struct/function not allowed",
                 ErrSite(self.__class__, "null struct"),
                 self, token
@@ -1169,7 +1169,7 @@ class FuncOrStructGroup(_Phrases):
                     self._phrases.sep('.')
             elif self._unaryBinaryOrStruct == BINARY:
                 if isAssignLeft:
-                    raise ParagraphError(
+                    raise GroupError(
                         "empty struct/function not allowed",
                         ErrSite(self.__class__, "assign left in single phrase binary"),
                         self, token
@@ -1240,13 +1240,13 @@ class ParametersGroup(_Phrases):
         phrase = self._tokens
         for token in phrase:
             if not isinstance(token, Token):
-                raise ParagraphError(
+                raise GroupError(
                     f'Parameter must be a name - got "{token}" - handle in _consumeToken - {token.l1}:{token.l2}',
                     ErrSite(self.__class__, "Param must be a name"),
                     self, token
                 )
         if len(phrase) == 0:
-            raise ParagraphError(
+            raise GroupError(
                 f'{{[] has no arguments @{self.l1}:{self.c1}',
                 ErrSite(self.__class__, "no args"),
                 self, Missing
@@ -1254,13 +1254,13 @@ class ParametersGroup(_Phrases):
         elif len(phrase) == 1:
             tok1 = phrase[0]
             if tok1.tag == ASSIGN_LEFT:
-                raise ParagraphError(
+                raise GroupError(
                     f'{{[... {tok1.src} is missing type @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "missing type"),
                     self, tok1
                 )
             elif tok1.tag != NAME:
-                raise ParagraphError(
+                raise GroupError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
@@ -1280,7 +1280,7 @@ class ParametersGroup(_Phrases):
                 # fred : name
                 phrase2 = [Parameter(self, tok1, phrase[2:])]
             else:
-                raise ParagraphError(
+                raise GroupError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
@@ -1297,7 +1297,7 @@ class ParametersGroup(_Phrases):
     def _finalise(self, tokenOrGroup):
         if self._tokens is Missing: raise ProgrammerError()
         if len(self._phrases) == 0:
-            raise ParagraphError(
+            raise GroupError(
                 'No parameters in list',
                 ErrSite(self.__class__, 'No parameters in list'),
                 self, Missing
@@ -1305,7 +1305,7 @@ class ParametersGroup(_Phrases):
         for phrase in self._phrases:
             # [a :int, b] is max allowed (i.e. 2 tokens - a name and a type)
             if phrase is not Missing and (len(phrase) < 1 or len(phrase) > 3):
-                raise ParagraphError(
+                raise GroupError(
                     'Parameters can only be one assigment expression each or a name',
                     ErrSite(self.__class__, 'only one assigment'),
                     self, phrase
@@ -1425,7 +1425,7 @@ class TypeLangGroup(_Phrase):
         self._finalise(token)
     def _finishPhrase(self, indent, cause, tokenOrGroup):
         print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
-        raise ParagraphError(
+        raise GroupError(
             "??? in _finishPhrase",
             ErrSite(self.__class__, "_finishPhrase"),
             self, tokenOrGroup
@@ -1434,7 +1434,7 @@ class TypeLangGroup(_Phrase):
     def _finalise(self, tokenOrGroup):
         try:
             if not self._isComplete:
-                raise ParagraphError(
+                raise GroupError(
                     "missing closer (\">\") for type lang group",
                     ErrSite(self.__class__, "_finalise"),
                     group=self,
@@ -1549,7 +1549,7 @@ class _KeywordGroup(_Phrases):
                 self._latestToken = tokenOrGroup
             elif tokenOrGroup.tag == ASSIGN_RIGHT:
                 if not self._tokens:
-                    raise ParagraphError(
+                    raise GroupError(
                         'AssignRight not only allowed at start of expression - %s',
                         ErrSite(self.__class__, 'AssignRight'),
                         self, tokenOrGroup
@@ -1578,7 +1578,7 @@ class _KeywordGroup(_Phrases):
             self._assignLeftOrMissing = parentTokens[0]
             firstArg = _Tokens() + parentTokens[1:]
             if not firstArg:
-                raise ParagraphError(
+                raise GroupError(
                     'Double assign left',
                     ErrSite(self.__class__, 'Double assign left'),
                     self, opener
@@ -1701,13 +1701,13 @@ class LoadGroup(_Phrases):
             self._phrases << self._tokens
             self._tokens = _Tokens()
         if len(self._phrases) == 0:
-            raise ParagraphError(
+            raise GroupError(
                 f'requires - no items specified - needs better error msg',
                 ErrSite(self.__class__, 'requires - no items specified'),
                 self, Missing
             )
         if self._awaitingTokens:
-            raise ParagraphError(
+            raise GroupError(
                 f'Encountered GROUP_END without a NAME - better error msg needed',
                 ErrSite(self.__class__, 'Encountered GROUP_END without a NAME'),
                 self, tokenOrGroup
@@ -1733,21 +1733,21 @@ class LoadGroup(_Phrases):
         stateToStore = Missing
 
         if not isinstance(tokenOrGroup, Token):
-            raise ParagraphError(
+            raise GroupError(
                 'No groups allowed in load - better error msg needed',
                 ErrSite(self.__class__, 'No groups allowed in load'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag is BREAKOUT:
-            raise ParagraphError(
+            raise GroupError(
                 'No breakouts allowed in load - better error msg needed',
                 ErrSite(self.__class__, 'No breakouts allowed in load'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag in (SEMI_COLON, KEYWORD_OR_ASSIGN_LEFT, ASSIGN_RIGHT):
-            raise ParagraphError(
+            raise GroupError(
                 f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in load - better error msg needed',
                 ErrSite(self.__class__, f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in load)'),
                 self, tokenOrGroup
@@ -1775,7 +1775,7 @@ class LoadGroup(_Phrases):
 
         elif tokenOrGroup.tag is COMMA:
             if self._awaitingTokens:
-                raise ParagraphError(
+                raise GroupError(
                     f'Encountered COMMA without a NAME - better error msg needed',
                     ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
                     self, tokenOrGroup
@@ -1790,7 +1790,7 @@ class LoadGroup(_Phrases):
                 self._appendToken(tokenOrGroup, indent)
                 self._awaitingTokens = False
             else:
-                raise ParagraphError(
+                raise GroupError(
                     f'Encountered a NAME or TEXT without a COMMA - better error msg needed',
                     ErrSite(self.__class__, 'Encountered NAME without a COMMA'),
                     self, tokenOrGroup
@@ -1835,13 +1835,13 @@ class FromImportGroup(_Phrases):
     def _finalise(self, tokenOrGroup):
         if self._tokens: self._finishPhrase(Missing, SECTION_END, tokenOrGroup)
         if len(self._phrases) == 0:
-            raise ParagraphError(
+            raise GroupError(
                 f'requires - no items specified - needs better error msg',
                 ErrSite(self.__class__, 'from import - no items specified'),
                 self, Missing
             )
         if self._awaitingTokensPostComma:
-            raise ParagraphError(
+            raise GroupError(
                 f'requires - missing items after last comma - needs better error msg',
                 ErrSite(self.__class__, 'from import - missing items after last comma'),
                 self, Missing
@@ -1880,7 +1880,7 @@ class FromImportGroup(_Phrases):
                 if tokenOrGroup.tag == NAME and tokenOrGroup.src == "import":
                     self._seenImport = True
                     return self
-                raise ParagraphError(
+                raise GroupError(
                     f'requires "import" after the path',
                     ErrSite(self.__class__, 'requires import after path'),
                     self, Missing
@@ -1925,14 +1925,14 @@ class FromImportGroup(_Phrases):
             self._phraseState = NOT_ENDING
 
         if not isinstance(tokenOrGroup, Token):
-            raise ParagraphError(
+            raise GroupError(
                 'No groups allowed in from import - better error msg needed',
                 ErrSite(self.__class__, 'No groups allowed in from import'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag is BREAKOUT:
-            raise ParagraphError(
+            raise GroupError(
                 'No breakouts allowed in from import - better error msg needed',
                 ErrSite(self.__class__, 'No breakouts allowed in from import'),
                 self, tokenOrGroup
@@ -1950,14 +1950,14 @@ class FromImportGroup(_Phrases):
                 self._startNewPhrase()
                 self._awaitingTokensPostComma = True
             else:
-                raise ParagraphError(
+                raise GroupError(
                     f'Encountered COMMA without a NAME - better error msg needed',
                     ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
                     self, tokenOrGroup
                 )
 
         elif tokenOrGroup.tag == SEMI_COLON:
-            raise ParagraphError(
+            raise GroupError(
                 f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in from import - better error msg needed',
                 ErrSite(self.__class__, f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in from import'),
                 self, tokenOrGroup

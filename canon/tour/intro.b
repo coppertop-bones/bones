@@ -1,6 +1,6 @@
 // this is a tour of the bones language
 // it is not a tour of a core library however it wouldn't be much fun if the code was not runnable so a
-// companion library, cbt.core, written in Python that provides necessary supporting functionality is included.
+// companion library, tlib.core, written in Python that provides necessary supporting functionality is included.
 //
 // let's begin...
 
@@ -13,10 +13,15 @@
 
 // we can tell the kernel to load other libraries - this make names available in the namespace they are defined
 load tlib.stats
-load tlib.core              // in all likelihood core was loaded by stats but let's ensure that
+load tlib.core              // in all likelihood core was loaded by stats but let's ensure it
 
 // we can import names from other namespaces into our local scope
-from cbt.misc import ...   // "..." here means that every function in cbt.core is added to our scope
+from tlib.misc import ...   // "..." here means that every function in tlib.core is added to our module namespace
+
+// technical note: scopes come in four types: global, module, function, contextual. When we load a file, a
+// corresponding module namespace is created, and by default names are located there. There are two well known
+// namespaces, the global root and scratch (which is were all interact programming is done). Because functions are
+// resolved via multi-dispatch there are less conflicts and more names tend to be added to the global root.
 
 
 // let's define a binary function (remember "binary" means it takes in two arguments from the pipeline not that it
