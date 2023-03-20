@@ -25,7 +25,7 @@ from bones.lang.lex import Token, prettyNameByTag, \
     PARENT_VALUE_NAME, \
     CONTEXT_NAME, CONTEXT_ASSIGN_RIGHT, \
     GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME
-from bones.lang.parse_structure import \
+from bones.lang.parse_groups import \
     LoadGroup, FromImportGroup, \
     FuncOrStructGroup, TupParenOrDestructureGroup, BlockGroup, \
     TypeLangGroup, \
@@ -36,7 +36,7 @@ from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet
 from bones.lang.metatypes import BTTuple, BTStruct
 from bones.lang.ctx import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, newFnCtx, ArgCatcher
 from bones.lang.types import TBI
-from bones.lang.parse_structure import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
+from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, ASSIGN_LEFT, UNARY_OR_STRUCT
 from bones.lang.parse_type_lang import parseTypeLang
 from bones.lang.structs import tv

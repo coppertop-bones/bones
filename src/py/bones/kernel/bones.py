@@ -7,7 +7,7 @@ import itertools, sys, collections
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError
 from bones.kernel.base import BaseKernel
-from bones.lang import parse_phrase, parse_structure, lex
+from bones.lang import parse_phrase, parse_groups, lex
 from bones.lang.infer import Simplifier, visit, InferenceLogger
 from bones.lang.tc import TcReport
 from bones.core.context import context
@@ -55,7 +55,7 @@ class BonesKernel(BaseKernel):
                 f'{line.l:>3}:  {line.src}' >> PP
             '' >> PP
 
-        group = parse_structure.parseStructure(tokens)
+        group = parse_groups.parseStructure(tokens)
 
         if context.showGroups:
             group.PPGroup >> PP

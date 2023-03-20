@@ -43,7 +43,7 @@ b: (1,2,3). b
     each both (1,2,3)
     check equals (2,4,6)
 
-// btw the b: means bind the following to the name b. :c means bind the preceding to the name c.
+// btw the b: means bind the following to the name b. In a similar vein :c means bind the preceding to the name c.
 d + c * x + b * (x * x :x2) + a * x * x2 :y
 
 // take care, although it can help make code denser and is easier to follow than using =, style and good taste

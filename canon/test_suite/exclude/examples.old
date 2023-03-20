@@ -1,0 +1,87 @@
+
+
+
+! is an inference time binary
+
+matrix!(3,3) calls the pre-inference time part of matrix with the argument an imlist of (3,3)
+
+it can note it's type in more detail with BDetailedType
+
+toMap!<:sym->U8:>  allows the map type to be qualified
+toMap can check that == (sym,sym)->bool  has been imported
+
+similarly
+toHashMap!<:sym->thing:>     can check that hash(sym)->int has been imported as well as checking thing exists
+
+In OO we typically say a struct must be hashable - this is a nominalisation!
+Instead we should say that hash is defined for the struct
+
+
+
+
+
+N, M, O are used to indicate correlated variable size arrays
+e.g. for S = <:(tradedate: date, asset: sym, price: num, ccy: ccy, prevailingFx: fx):>
+N->S is isomorphic to
+(tradedate: N**date, asset: N**sym, price: N**num, ccy: N**ccy, prevailingFx: N**fx)  is a struct of equal lengh arrays
+
+a non square matrix N by M is <:M**(N**num):>  fortran (col major) ordering   N is less than M  so access is myMatrix(0..N, 0..M)
+
+can .. be used as a slice operator? I think we can restrict .a to just one level for implicit partials
+
+a square matrix N by N is  <:N**(N**num):>
+
+for a: matrix!(3,4)     a's type is <:4**(3**num):>
+
+
+
+** and -> are both mappings but prefer ** in compound situations, e.g. here
+
+
+collectUsing allows a pipeline to run whilst collecting side band results - e.g. logging entries, commands for a database transaction, error codes etc
+collectUsing =>
+    (T1|(T1,N**T3), (T1)->(T2,T3)) -> (T2,N**T3)
+    (T1|(T1,N**T3), (T1)->(T2|T3)) -> (T2,N**T3)
+
+
+collectErrors: collectUsing ! <: (T1|(T1,N**error),(T1)->T2|error) -> (T2,N**error) :>
+
+options = (
+    `title; "my graph",
+    `xlab; "days",
+) toDict!<:sym**ascii:>
+
+data \
+    collectErrors op1(options ...) \
+    collectErrors op2(options ...) \ etc
+
+[fred: 1, joe: 2]    deferred assignments
+([] fred: (1;2;3), joe:(2;3;4))    table syntax
+([] fred: (1,2,3) T, joe:(2,3,4) T)
+
+assignments in a list product a dictionary?
+better suggestion keep assignment and add single = for dictionary construction
+
+name keywords
+
+sum(
+    y=2,
+    x=1
+) == 0.5 assertTrue
+
+
+
+some type rules
+
+null + inf|num -> any
+1/0 -> inf
+-1 ln -> notA
+null * inf|num|missing|notA -> null
+missing + inf|null|num|notA -> missing
+missing * inf|num|notA -> missing
+
+
+
+
+
+

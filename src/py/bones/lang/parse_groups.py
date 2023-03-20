@@ -229,11 +229,13 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 from coppertop.pipe import coppertop
+from dm.pp import PP, EE
 
 from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented
 from bones.core.sentinels import Missing
 from bones.core.errors import ErrSite
 from bones.core.errors import GroupError
+from bones.lang.tc import tcnode
 
 from bones.lang.lex import prettyNameByTag, Token, \
     L_ANGLE_COLON, L_PAREN, L_BRACKET, L_BRACE, R_ANGLE, R_PAREN, R_BRACKET, \
@@ -338,10 +340,10 @@ def parseStructure(tokens, TRACE=False):
                 if consumer is Missing: consumer = catchKeyword(token, currentTG, stack)
                 if consumer:
                     if TRACE:
-                        print(f"{currentTG.PPDebug} != {PPDebug(token)} .1")
+                        f"{currentTG.PPDebug} != {PPDebug(token)} .1" >> PP
                     currentTG = consumer
                     if TRACE:
-                        print(f"{currentTG.PPDebug} << {PPDebug(token)} .1")
+                        f"{currentTG.PPDebug} << {PPDebug(token)} .1" >> PP
                     if TRACE:
                         if currentTG not in traceGroups: traceGroups[next(traceGroupCount)] = currentTG  # FOR DEBUG
             if consumer is Missing:
@@ -350,23 +352,23 @@ def parseStructure(tokens, TRACE=False):
                     consumer = currentTG._consumeToken(token, token.indent)
                     if consumer:
                         if TRACE:
-                            print(f"{currentTG.PPDebug} << {PPDebug(token)} .2")
+                            f"{currentTG.PPDebug} << {PPDebug(token)} .2" >> PP
                         break
                 if isCloser:
                     wanted = currentTG._processCloserOrAnswerError(token)  # will cause anything that doesn't care to self _finalise
                     if isinstance(wanted, str):
                         # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
-                        print(f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}')
+                        f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}' >> EE
                         got = prettyNameByTag[token.tag]
                         raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
                     consumer = currentTG
                     if TRACE:
-                        print(f"{currentTG.PPDebug} << {PPDebug(token)} .3")
+                        f"{currentTG.PPDebug} << {PPDebug(token)} .3" >> PP
                     break
                 # pop groups off the stack that have finished consuming tokens
                 while currentTG._tokens is Missing:
                     if TRACE:
-                        print(f"{currentTG.PPDebug} != {PPDebug(token)} .4")
+                        f"{currentTG.PPDebug} != {PPDebug(token)} .4" >> PP
                     stack.pop()
                     currentTG = stack.current
                     currentTGChanged = True
@@ -380,7 +382,7 @@ def parseStructure(tokens, TRACE=False):
                 wanted = currentTG._processCloserOrAnswerError(token)             # will cause anything that doesn't care to self _finalise
                 if isinstance(wanted, str):
                     # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
-                    print(f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}')
+                    f'{currentTG.l1}:{currentTG.c1} to {token.l2}:{token.c2}' >> EE
                     got = prettyNameByTag[token.tag]
                     raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
                 consumer = currentTG
@@ -389,7 +391,7 @@ def parseStructure(tokens, TRACE=False):
                 if consumer:
                     currentTG = consumer
                     if TRACE:
-                        print(f"{currentTG.PPDebug} << {PPDebug(token)} .5")
+                        f"{currentTG.PPDebug} << {PPDebug(token)} .5" >> PP
 
         if consumer is Missing:
             raise GroupError('Unhandled token %s' % str(token), ErrSite("Unhandled token"), currentTG, token)
@@ -672,7 +674,7 @@ class _Phrases(_Group):
         self._emptyPolicy = emptyPolicy
 
     def _finishPhrase(self, indent, cause, tokenOrGroup):
-        # print(tokenOrGroup)
+        # tokenOrGroup >> PP
         if (phrase := self._tokens):
             # phrase has tokesns
             if cause == SUGGESTED_BY_LINE_BREAK:
@@ -1115,7 +1117,7 @@ class FuncOrStructGroup(_Phrases):
             self._tRet or                                       # has return type so it's a function
             self._hasDot                                        # has a dot so it's a function
         ):
-            print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
+            f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
             raise GroupError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in function body"),
@@ -1125,7 +1127,7 @@ class FuncOrStructGroup(_Phrases):
                 not self._tokens or                          # having a comma with a blank phrase is illegal
                 self._tokens[0].tag != ASSIGN_LEFT           # having a comma without an assign left is illegal
         ):
-            print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
+            f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
             raise GroupError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in {}"),
@@ -1137,7 +1139,7 @@ class FuncOrStructGroup(_Phrases):
         super()._commaEncountered(tokenOrGroup)
 
     def _semicolonEncountered(self, tokenOrGroup):
-        print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
+        f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
         raise GroupError(
             "Semi-colon encountered in function body",
             ErrSite(self.__class__, "illegal SEMI_COLON in function body"),
@@ -1422,7 +1424,7 @@ class TypeLangGroup(_Phrase):
         self._isComplete = True
         self._finalise(token)
     def _finishPhrase(self, indent, cause, tokenOrGroup):
-        print(f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}")
+        f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
         raise GroupError(
             "??? in _finishPhrase",
             ErrSite(self.__class__, "_finishPhrase"),
@@ -2071,8 +2073,7 @@ class _DotOrCommaSep(_GuardedList):
             sep + ' ',
             lambda x: not (
                 x is Missing or
-                isinstance(x, _Tokens) or
-                x.__class__.__name__ == 'tcnode'        # rather than impoert tcnode
+                isinstance(x, (_Tokens, tcnode))
             )
         )
 
@@ -2155,36 +2156,36 @@ def pairwise(iterable):
 
 
 handlersByErrSiteId.update({
-    ('bones.lang.parse_structure', Missing, 'parseStructure', 'Unhandled token') : '...',
-    ('bones.lang.parse_structure', Missing, 'parseStructure', 'wanted got') : '...',
-    ('bones.lang.parse_structure', Missing, '_procesAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
+    ('bones.lang.parse_groups', Missing, 'parseStructure', 'Unhandled token') : '...',
+    ('bones.lang.parse_groups', Missing, 'parseStructure', 'wanted got') : '...',
+    ('bones.lang.parse_groups', Missing, '_procesAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
 
-    ('bones.lang.parse_structure', 'FromImportGroup', '_consumeToken', 'requires import after path') : '...',
+    ('bones.lang.parse_groups', 'FromImportGroup', '_consumeToken', 'requires import after path') : '...',
 
-    ('bones.lang.parse_structure', 'LoadGroup', '_finalise', 'requires - no items specified') : '...',
-    ('bones.lang.parse_structure', 'LoadGroup', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
-    ('bones.lang.parse_structure', 'LoadGroup', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.lang.parse_groups', 'LoadGroup', '_finalise', 'requires - no items specified') : '...',
+    ('bones.lang.parse_groups', 'LoadGroup', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.lang.parse_groups', 'LoadGroup', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
 
-    ('bones.lang.parse_structure', 'ParametersGroup', '_finishPhrase', 'no args') : '...',
-    ('bones.lang.parse_structure', 'ParametersGroup', '_finishPhrase', 'Param must be a name') : '...',
-    ('bones.lang.parse_structure', 'ParametersGroup', '_consumeToken', 'assign right') : '...',
+    ('bones.lang.parse_groups', 'ParametersGroup', '_finishPhrase', 'no args') : '...',
+    ('bones.lang.parse_groups', 'ParametersGroup', '_finishPhrase', 'Param must be a name') : '...',
+    ('bones.lang.parse_groups', 'ParametersGroup', '_consumeToken', 'assign right') : '...',
 
-    ('bones.lang.parse_structure', 'SnippetGroup', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
-    ('bones.lang.parse_structure', 'SnippetGroup', '_commaEncountered', 'COMMA not valid in snippet') : '...',
-    ('bones.lang.parse_structure', 'SnippetGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.lang.parse_groups', 'SnippetGroup', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
+    ('bones.lang.parse_groups', 'SnippetGroup', '_commaEncountered', 'COMMA not valid in snippet') : '...',
+    ('bones.lang.parse_groups', 'SnippetGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.lang.parse_structure', 'FrameGroup', '_dotEncountered', 'DOT not valid in group') : '...',
-    ('bones.lang.parse_structure', 'FrameGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.lang.parse_structure', 'FrameGroup', '_finishPhrase', 'Illegal new line') : '...',
+    ('bones.lang.parse_groups', 'FrameGroup', '_dotEncountered', 'DOT not valid in group') : '...',
+    ('bones.lang.parse_groups', 'FrameGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.lang.parse_groups', 'FrameGroup', '_finishPhrase', 'Illegal new line') : '...',
 
-    ('bones.lang.parse_structure', 'FrameKeysGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.lang.parse_groups', 'FrameKeysGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.lang.parse_structure', 'TupParenOrDestructureGroup', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
-    ('bones.lang.parse_structure', 'TypeLangGroup', '_finalise', '_finalise') : '',
+    ('bones.lang.parse_groups', 'TupParenOrDestructureGroup', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
+    ('bones.lang.parse_groups', 'TypeLangGroup', '_finalise', '_finalise') : '',
 
-    ('bones.lang.parse_structure', 'FuncOrStructGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.lang.parse_structure', 'FuncOrStructGroup', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
-    ('bones.lang.parse_structure', 'FuncOrStructGroup', '_commaEncountered', 'illegal COMMA in function body') : '...',
-    ('bones.lang.parse_structure', 'FuncOrStructGroup', '_processCloserOrAnswerError', 'null struct') : '...',
-    ('bones.lang.parse_structure', 'FuncOrStructGroup', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
+    ('bones.lang.parse_groups', 'FuncOrStructGroup', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.lang.parse_groups', 'FuncOrStructGroup', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
+    ('bones.lang.parse_groups', 'FuncOrStructGroup', '_commaEncountered', 'illegal COMMA in function body') : '...',
+    ('bones.lang.parse_groups', 'FuncOrStructGroup', '_processCloserOrAnswerError', 'null struct') : '...',
+    ('bones.lang.parse_groups', 'FuncOrStructGroup', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
 })
