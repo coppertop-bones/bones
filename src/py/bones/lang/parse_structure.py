@@ -153,7 +153,6 @@
 # -------------------------------------------------------------------------------------
 # nullary     | noun      | noun      | unpipable | unpipable | unpipable | unpipable
 # unary       | noun (4.) | noun      | unary     | NYP       | NYP       | NYP
-# rau         | lllegal   | noun      | rau       | NYP       | NYP       | NYP
 # binary      | illegal   | noun      | unpipable | binary    | NYP       | NYP
 # ternary     | illegal   | noun      | unpipable | unpipable | ternary   | NYP
 #
@@ -201,7 +200,6 @@
 #       fn_style_nullary - {...} <:nullary>
 #       fn_style_ternary1 - {...} <:ternary>
 #       fn_style_ternary2 - {{{...}}}
-#       fn_style_rau - {...} <:rau>
 #
 # fn_or_struct - function or struct - a nonsensical function so we make it a struct
 #       fn_or_struct - {name: phrase}   -> struct1

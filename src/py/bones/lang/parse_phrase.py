@@ -113,7 +113,6 @@ def buildFnApplication(lhs, ctxWithFn, fOrName, ctx, tokens, k):
 
     if lhs is Missing:
         # possibilities
-        # rau noun                  (rau may have tuples afterward)
         # fn ()                     (fn may have more than one tuple afterward)
         if len(tokens) == 1:
             x = parseSingle(tokens[0], ctx, k)
