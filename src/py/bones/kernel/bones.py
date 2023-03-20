@@ -175,7 +175,7 @@ class BonesKernel(BaseKernel):
                     # for the moment only import new names handle overloading later
                     pass
                 else:
-                    ctx.defFnMeta(name, importee._t, LOCAL_SCOPE)
+                    ctx.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
                     if isinstance(importee.d, _Dispatcher):
                         for fnBySig in importee.d.fnBySigByNumArgs:
                             for d in fnBySig.values():
