@@ -25,7 +25,7 @@ from bones.lang.metatypes import BType
 from bones import jones
 
 
-result = collections.namedtuple('result', 'tokens, types, result, error')
+pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 
 
 class BonesKernel(BaseKernel):
@@ -47,7 +47,7 @@ class BonesKernel(BaseKernel):
             s1, s2 = lines[l].s1, lines[l].s2
             print(src[s1:s2], file=sys.stderr)
 
-    def run(self, src, meta=Missing):
+    def pace(self, src, stopAtLine=Missing):
         srcId = next(self.nextSrcId)
         self.srcById[srcId] = src
 
@@ -77,33 +77,28 @@ class BonesKernel(BaseKernel):
 
         # analyse
         grammarError = Missing
-
         allVars = []
-        with context(actions=[], kernel=self, tt=(InferenceLogger(log=False) if context.tt is Missing else context.tt), infercache=self.infercache):
-            typesReport = []
-            for i, n in enumerate(snippetTc.nodes):
-                linenum = i + 1
-                try:
-                    with context(newVars=[], stop=False, tt=context.tt.setNum(linenum)): #.newLevel().preloadForMe(f'')):
-                        if meta is not Missing and meta == linenum:
-                            context.stop = True
-                        t = visit(n, self.scratch)
-                        with context(tt=context.tt.newLevel()):
-                            s = Simplifier(context.newVars)
-                            # s.trySimplifyAll()      # we have a simple return type but there may be vars underneath that haven't been similified
-                            typesReport.append((n, st:=s.trySimplify(t)))
-                        allVars.extend(context.newVars)
-                except GrammarError as ex:
-                    grammarError = ex
-                    break
-            '' >> context.tt
+        typesReport = []
 
-        # if context.showTc:
-        #     tcReport = TcReport()
-        #     snippetTc.PPTC(1, tcReport)
-        #     for i, line in enumerate(tcReport):
-        #         f'{i + 1:>3} {line.node.id:>3}  ' + '  ' * (line.depth - 1) + line.pp >> PP
-        #     '' >> PP
+        analyse = False if context.run is Missing else context.run
+        if analyse:
+            with context(actions=[], kernel=self, tt=(InferenceLogger(log=False) if context.tt is Missing else context.tt), infercache=self.infercache):
+                for i, n in enumerate(snippetTc.nodes):
+                    linenum = i + 1
+                    try:
+                        with context(newVars=[], stop=False, tt=context.tt.setNum(linenum)): #.newLevel().preloadForMe(f'')):
+                            if stopAtLine is not Missing and stopAtLine == linenum:
+                                context.stop = True
+                            t = visit(n, self.scratch)
+                            with context(tt=context.tt.newLevel()):
+                                s = Simplifier(context.newVars)
+                                # s.trySimplifyAll()      # we have a simple return type but there may be vars underneath that haven't been similified
+                                typesReport.append((n, st:=s.trySimplify(t)))
+                            allVars.extend(context.newVars)
+                    except GrammarError as ex:
+                        grammarError = ex
+                        break
+                '' >> context.tt
 
         if context.showTypes:
             for n, t in typesReport:
@@ -119,13 +114,14 @@ class BonesKernel(BaseKernel):
         # compile
 
 
-        # execute
-        if not context.norun and not grammarError:
+        # run
+        run = True if context.run is Missing else context.run
+        if run and not grammarError:
             answer = self.tcrunner.executeTc(snippetTc)
         else:
             answer = Void
 
-        return result(tokens, typesReport, answer, grammarError)
+        return pace_res(tokens, typesReport, answer, grammarError)
 
 
 
@@ -143,6 +139,7 @@ class BonesKernel(BaseKernel):
                 if modPath not in self.modByPath:
                     mod = getattr(mod, name)
                     self.modByPath[modPath] = mod
+
 
 
     def importSymbols(self, path, names, ctx):
