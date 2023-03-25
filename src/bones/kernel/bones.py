@@ -30,14 +30,17 @@ pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 
 class BonesKernel(BaseKernel):
 
+    __slots__ = ['srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch']
+
     def __init__(self, sm):
         super().__init__(sm)
         self.srcById = {}
         self.linesById = {}
         self.nextSrcId = itertools.count(start=1)
         self.infercache = set()
-        self.tcrunner = Missing
         self.sm = sm
+        self.tcrunner = Missing
+        self.scratch = Missing
 
     def dumpLines(self, srcId, l1, l2):
         l1 = max(l1, 1)
@@ -80,7 +83,7 @@ class BonesKernel(BaseKernel):
         allVars = []
         typesReport = []
 
-        analyse = False if context.run is Missing else context.run
+        analyse = False if context.analyse is Missing else context.analyse
         if analyse:
             with context(actions=[], kernel=self, tt=(InferenceLogger(log=False) if context.tt is Missing else context.tt), infercache=self.infercache):
                 for i, n in enumerate(snippetTc.nodes):
