@@ -68,6 +68,7 @@ style. The BIDMAS / BODMAS decision may be revisited but the usual (and complex)
 to pipeline style that it seems impossible to incorporate them. (The upside of left-to-right only precedence is that the 
 parser is much simpler).
 
+<br>
 
 
 ### SYNTAX TOUR
