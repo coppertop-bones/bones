@@ -4,7 +4,19 @@ Bones is a scalable, minimalist (bare bones), high level domain specific scripti
 ages 8 - 80+) for data wrangling and algorithm development combining the pithiness of kdb/q and the readability 
 of Smalltalk with multiple-dispatch, partial functions and type inference.
 
+This repo contains a Python implementation of the parts of the bones langauge - i.e. although working, it is not 
+finished yet. The documents here are intended for programmers wishing to understand the bones implementation.
+
+For documentation for how to use bones - see https://github.com/coppertop-bones/docs.
+
+To install the python version of bones
+
+```
+pip install coppertop-bones
+```
+
 <br>
+
 Fundamental values
 
 Bones should help us faithfully represent our ideas so we can use the computer for tasks we can't do in our heads.
@@ -17,6 +29,7 @@ Bones should help us faithfully represent our ideas so we can use the computer f
 And, almost most importantly, it should be fun to do so and result in pleasing and elegant code.
 
 <br>
+
 Implementing the fundamental values
 
 The language is designed and implemented such that:
@@ -68,7 +81,6 @@ style. The BIDMAS / BODMAS decision may be revisited but the usual (and complex)
 to pipeline style that it seems impossible to incorporate them. (The upside of left-to-right only precedence is that the 
 parser is much simpler).
 
-<br>
 
 
 ### SYNTAX TOUR
