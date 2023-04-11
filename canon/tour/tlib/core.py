@@ -1,4 +1,4 @@
-BONES_NS = ''
+MODULE_NS = ''
 
 # define:
 # u8

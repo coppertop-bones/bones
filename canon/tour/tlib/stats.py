@@ -1,1 +1,1 @@
-BONES_NS = 'tlib.stats'
+MODULE_NS = 'tlib.stats'
