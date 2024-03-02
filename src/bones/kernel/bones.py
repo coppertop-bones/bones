@@ -19,7 +19,7 @@ from bones.lang.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Dispatcher
 import dm.pp
-from groot import PP
+from dm.core import PP
 from bones.lang.core import LOCAL_SCOPE
 from bones.lang.metatypes import BType
 from bones import jones
@@ -147,7 +147,7 @@ class BonesKernel(BaseKernel):
 
     def importSymbols(self, path, names, ctx):
         if (mod := self.modByPath.get(path, Missing)) is Missing:
-            raise ImportError(f"Can't import {names} becuause '{path}' has not been loaded.", ErrSite("Module not loaded"))
+            raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
         for name in names:
             importee = Missing
             if hasattr(mod, name):

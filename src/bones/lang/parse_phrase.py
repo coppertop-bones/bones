@@ -29,7 +29,7 @@ from bones.lang.lex import Token, prettyNameByTag, \
     NAME, SYMBOLIC_NAME, ASSIGN_RIGHT, \
     PARENT_VALUE_NAME, \
     CONTEXT_NAME, CONTEXT_ASSIGN_RIGHT, \
-    GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME
+    GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME, ELLIPSES
 from bones.lang.parse_groups import \
     LoadGroup, FromImportGroup, \
     FuncOrStructGroup, TupParenOrDestructureGroup, BlockGroup, \
@@ -545,8 +545,10 @@ def parsePhrase(tokens, ctx, k):
                             name += ':'
                         elif tok.tag in (NAME, SYMBOLIC_NAME):
                             name += tok.src
+                        elif tok.tag == ELLIPSES:
+                            name += tok.src
                         else:
-                            raise NotYetImplemented()
+                            raise NotYetImplemented(f'tok: {tok}')
                     names.append(name)
                 lhs = fromimport(t.tok1, t.tok2, ctx, t.path, names)
                 k.importSymbols(lhs.path, lhs.names, lhs.ctx)

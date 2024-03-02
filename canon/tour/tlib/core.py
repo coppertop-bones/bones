@@ -1,4 +1,3 @@
-MODULE_NS = ''
 
 # define:
 # u8

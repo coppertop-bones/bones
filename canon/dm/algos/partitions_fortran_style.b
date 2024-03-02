@@ -18,10 +18,10 @@ from dm.core import ...
 partitions: {{[xs:N**T1, sizes:N2**count] <:N**N2**N**T1>
 
     // sizes sum check equal (xs count)
-    check(sum(sizes), equal, count(sx));
+    check(sum(sizes), equal, count(sx))
 
     // xs _partitions(, xs count, sizes)
-    _partitions(xs, count(xs), sizes);
+    _partitions(xs, count(xs), sizes)
 
 }}
 
@@ -30,7 +30,7 @@ partitions: {{[xs:N**T1, sizes:N2**count] <:N**N2**N**T1>
 _partitions: {[xs:N**T1, n:count, sizes:N2**count] <:N**N2**N**T1>
 
     // sizes isEmpty ifTrue: [^ (())]
-    (ifTrue:)(isEmpty(sizes), [^ ( () )])
+    isEmpty(sizes) ifTrue: [^ (())]
 
     // xs _combRest(, n, sizes first) each {[a, b]
     //    _partitions(b, .n - (.sizes first), .sizes drop 1) each {
@@ -58,17 +58,8 @@ _partitions: {[xs:N**T1, n:count, sizes:N2**count] <:N**N2**N**T1>
 // struct tuple2 * _combRest(T1 *xs, count n, count m)
 _combRest: {[xs:N**T1, n:count, m:count] <:N**(N**T1)*(N**T1)>
 
-    // m == 0 ifTrue: [^ ( ((), xs) ) to <:N**T1>]
-    (ifTrue:)(
-        m == 0,
-        [^ to( ( ((), xs) ), <:N**T1>)]
-    )
-
-    // m == n ifTrue: [^ ( (xs, ()) ) to <:N**T1>]
-    (ifTrue:)(
-        m == n,
-        [^ to( ( (xs, ()) ), <:N**T1>)]
-    )
+    m == 0 ifTrue: [^ to( ( ((), xs) ), <:N**T1>)]
+    m == n ifTrue: [^ to( ( (xs, ()) ), <:N**T1>)]
 
     //(s1, s2): xs takeDrop 1
     (s1, s2): takeDrop(XS, 1)
@@ -78,7 +69,7 @@ _combRest: {[xs:N**T1, n:count, m:count] <:N**(N**T1)*(N**T1)>
     //  _combRest(s2, s2 count, m) each { (a, .s1 join b) }      // #2
     join(
         each(_combRest(s2, count(s2), m - 1), { (join(.s1, a), b) }),    // #1
-        each(_combRest(s2, count(s2), m), { (a, join().s1,b)) })      // #2
+        each(_combRest(s2, count(s2), m), { (a, join().s1,b) })      // #2
     )
 
 }
