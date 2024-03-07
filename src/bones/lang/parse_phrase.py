@@ -286,7 +286,7 @@ def parseParameters(params, fnctx, k):
             t = parseTypeLang(tp, k)
         else:
             t = TBI
-        fnctx.defVMeta(name, t)
+        fnctx.defVMeta(name, t, LOCAL_SCOPE)
         argnames.append(name)
         tArgs.append(t)
     return argnames, tArgs
@@ -529,8 +529,9 @@ def parsePhrase(tokens, ctx, k):
             elif isinstance(t, LoadGroup):
                 # i.e. searches PYTHON_PATH and BONES_PATH for bones/ex/ and load core.py or core.b
                 paths = []
-                for tok in t.phrases[0]:
-                    paths.append(tok.src)
+                for phrase in t.phrases:
+                    for tok in phrase:
+                        paths.append(tok.src)
                 lhs = load(t.tok1, t.tok2, ctx, paths)
                 k.loadModules(lhs.paths)
                 tokens >> 1

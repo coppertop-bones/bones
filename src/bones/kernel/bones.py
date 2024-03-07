@@ -19,7 +19,7 @@ from bones.lang.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Dispatcher
 import dm.pp
-from dm.core import PP
+from dm.pp import PP
 from bones.lang.core import LOCAL_SCOPE
 from bones.lang.metatypes import BType
 from bones import jones
@@ -139,8 +139,8 @@ class BonesKernel(BaseKernel):
                 self.modByPath[modPath] = mod
             for name in names[1:]:
                 modPath = modPath + '.' + name if modPath else name
+                mod = getattr(mod, name)
                 if modPath not in self.modByPath:
-                    mod = getattr(mod, name)
                     self.modByPath[modPath] = mod
 
 
