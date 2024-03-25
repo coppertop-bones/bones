@@ -26,7 +26,7 @@ from bones.lang.lex import Token, prettyNameByTag, \
     GLOBALTIME_M, GLOBALTIME_SS, GLOBALTIME_S, \
     GLOBALTIMESTAMP_M, GLOBALTIMESTAMP_S, GLOBALTIMESTAMP_SS, \
     LOCALTIMESTAMP_SS, LOCALTIMESTAMP_S, LOCALTIMESTAMP_M, \
-    NAME, SYMBOLIC_NAME, ASSIGN_RIGHT, \
+    NAME, SYMBOLIC_NAME, ASSIGN_RIGHT, ASSIGN_LEFT, \
     PARENT_VALUE_NAME, \
     CONTEXT_NAME, CONTEXT_ASSIGN_RIGHT, \
     GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME, ELLIPSES
@@ -42,7 +42,7 @@ from bones.lang.metatypes import BTTuple, BTStruct
 from bones.lang.ctx import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, newFnCtx, ArgCatcher
 from bones.lang.types import TBI
 from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
-    TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, ASSIGN_LEFT, UNARY_OR_STRUCT
+    TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
 from bones.lang.parse_type_lang import parseTypeLang
 from bones.lang.structs import tv
 
@@ -110,13 +110,11 @@ def snippetOrTc(phrases):
     else:
         return phrases
 
-def buildFnApplication(lhs, ctxWithFn, fOrName, ctx, tokens, k):
-    if isinstance(fOrName, bfunc):
-        style = fOrName.literalstyle        # use the literal function's literal style
-    else:
-        style = ctx.styleOfName(fOrName)
 
-    if lhs is Missing:
+def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
+    style = fOrName.literalstyle if isinstance(fOrName, bfunc) else ctx.styleOfName(fOrName)
+
+    if node is Missing:
         # possibilities
         # fn ()                     (fn may have more than one tuple afterward)
         if len(tokens) == 1:
@@ -158,7 +156,7 @@ def buildFnApplication(lhs, ctxWithFn, fOrName, ctx, tokens, k):
             elif isinstance(next, Token):
                 if next.tag == ASSIGN_RIGHT:
                     # OPEN: handle {a+1} :f (1)   which should answer apply(bindfn('f', deffn(...)),1) but may impact elsewhere
-                    # handled in main parse loop so just put the function in the lhs and consume 1 token
+                    # handled in main parse loop so just put the function in the node and consume 1 token
                     if ctxWithFn is Missing:
                         f = fOrName
                     else:
@@ -171,86 +169,100 @@ def buildFnApplication(lhs, ctxWithFn, fOrName, ctx, tokens, k):
                 raise NotYetImplemented()
         else:
             raise ProgrammerError()
+
+
+    elif style is unary:
+        # noun unary            (unary may have tuples afterward)
+        if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGroup):
+            tupleType, tup = parseTupParenOrDestructureGroup(postUnaryTok, ctx, k.sm)
+            if tupleType == TUPLE_OR_PAREN:
+                # noun unary (...)
+                raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
+            else:
+                # noun unary(,args)
+                rhs = postUnaryTok.tok2
+                parenArgs = postUnaryTok.grid[0]
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)
+                raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
+        else:
+            # noun unary
+            rhs = tokens[0].tok2
+            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)
+        return apply(node.tok1, tokens[0], ctx, f, [node]), 1
+
+
+    elif style is binary:
+        # noun binary arg2          (binary and arg2 may have tuples afterward)
+        if len(tokens) < 2: raise SentenceError("incomplete phrase - {noun, binary} is missing args after the binary")
+        postBinaryTok = tokens[1]
+        if isinstance(postBinaryTok, TupParenOrDestructureGroup):
+            tupleType, tup = parseTupParenOrDestructureGroup(postBinaryTok, ctx, k.sm)
+            if tupleType == TUPLE_OR_PAREN:
+                # noun binary (arg2)
+                arg2 = tup[0]
+                rhs = postBinaryTok.tok2
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)
+            else:
+                # e.g. noun binary (,,args) arg2`
+                parenArgs = postBinaryTok.grid[0]
+                rhs = postBinaryTok.tok2
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)
+                # OPEN: handle arg2(...)
+                raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
+        else:
+            arg2 = parseSingle(postBinaryTok, ctx, k)
+            rhs = arg2.tok2
+            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)      # OPEN handle partials
+
+        return apply(node.tok1, rhs, ctx, f, [node, arg2]), 2
+
+
+    elif style is ternary:
+        # noun ternary arg2 arg3    (ternary, arg2 and arg3 may have parens afterward)
+        if len(tokens) < 3: raise SentenceError(f"incomplete phrase - {{noun, ternary{', arg2' if len(tokens) == 2 else ''}}} is missing args after the ternary")
+
+        i = 1
+
+        # handle token after ternary
+        tok = tokens[i]
+        if isinstance(tok, TupParenOrDestructureGroup):
+            tupleType, tup = parseTupParenOrDestructureGroup(tok, ctx, k.sm)
+            if tupleType == TUPLE_OR_PAREN:
+                # e.g. of form `noun ternary (arg2) arg3`
+                arg2 = tup[0]
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
+                i += 1
+            else:
+                # e.g. of form `noun ternary (,,...) arg2 arg3`
+                parenArgs = tok.grid[0]
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)  # OPEN handle partials
+                raise NotYetImplemented("need to get the postTernaryTok two pipeable args and merge with paren args")
+        else:
+            arg2 = parseSingle(tok, ctx, k)  # OPEN: handle post arg2 to parens
+            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
+            i += 1
+
+        # handle token after arg2
+        tok = tokens[i]
+        if isinstance(tok, TupParenOrDestructureGroup):
+            tupleType, tup = parseTupParenOrDestructureGroup(tok, ctx, k.sm)
+            if tupleType == TUPLE_OR_PAREN:
+                # e.g. of form `noun ternary arg2 (arg3)`
+                arg3 = tup[0]
+                i += 1
+            else:
+                # e.g. of form `noun ternary arg2 (,,...) arg3`
+                parenArgs = tok.grid[0]
+                numargs = len(parenArgs)
+                raise NotYetImplemented("need to get the postTernaryTok two pipeable args and merge with paren args")
+        else:
+            arg3 = parseSingle(tok, ctx, k)  # OPEN: handle post arg3 to parens
+            i += 1
+
+        return apply(node.tok1, arg3.tok2, ctx, f, [node, arg2, arg3]), 3
+
+
     else:
-
-        if style is unary:
-            # noun unary                (unary may have tuples afterward)
-            if len(tokens) > 1:
-                next = tokens[1]
-                if isinstance(next, TupParenOrDestructureGroup):
-                    tupleType, tup = parseTupParenOrDestructureGroup(next, ctx, k.sm)
-                    numargs = 1/0
-                    raise NotYetImplemented()  # cound be various
-                else:
-                    numargs = 1
-            else:
-                numargs = 1
-            if ctxWithFn is Missing:
-                f = fOrName
-            else:
-                f = getoverload(tokens[0], ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-            return apply(lhs.tok1, tokens[0], ctx, f, [lhs]), 1
-
-        elif style is binary:
-            # noun binary rhs           (binary and rhs may have tuples afterward)
-            if len(tokens) == 1:
-                raise SentenceError("incomplete phrase - [noun, binary] something needed after the binary")
-            next = tokens[1]
-            if isinstance(next, TupParenOrDestructureGroup):
-                tupleType, tup = parseTupParenOrDestructureGroup(next, ctx, k.sm)
-                if tupleType == TUPLE_OR_PAREN:
-                    # of form `a binary (b)`
-                    rhs = tup
-                    numargs = 2
-                    if ctxWithFn is Missing:
-                        f = fOrName
-                    else:
-                        f = getoverload(1/0, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(1/0, 1/0, ctx, f, [lhs, rhs]), 2
-                else:
-                    # e.g. of form `a binary (,b,) c`
-                    parenArgs = next.grid[0]
-                    numargs = len(parenArgs)
-                    raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
-            else:
-                numargs = 2
-                if ctxWithFn is Missing:
-                    f = fOrName
-                else:
-                    f = getoverload(tokens[0].tok1, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                rhs = parseSingle(next, ctx, k)
-                return apply(lhs.tok1, rhs.tok2, ctx, f, [lhs, rhs]), 2
-
-        elif style == ternary:
-            # noun ternary rhs1 rhs2    (binary, rhs1 and rhs2 may have tuples afterward)
-            if len(tokens) <= 2:
-                raise SentenceError("incomplete phrase - [noun, binary] something needed after the ternary")
-            next = tokens[1]
-            if isinstance(next, TupParenOrDestructureGroup):
-                tupleType, tup = parseTupParenOrDestructureGroup(next, ctx, k.sm)
-                if tupleType == TUPLE_OR_PAREN:
-                    # e.g. of form `a ternary (b) c`
-                    rhs = tup
-                    numargs = 3
-                    if ctxWithFn is Missing:
-                        f = fOrName
-                    else:
-                        f = getoverload(1/0, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(1/0, 1/0, ctx, f, [lhs, rhs]), 3
-                else:
-                    # e.g. of form `a binary (,b,,) c d`
-                    parenArgs = next.grid[0]
-                    numargs = len(parenArgs)
-                    raise NotYetImplemented("need to get the next two pipeable args and merge with paren args")
-
-            else:
-                numargs = 3
-                if ctxWithFn is Missing:
-                    f = fOrName
-                else:
-                    f = getoverload(1/0, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                rhs = parseSingle(next, ctx, k)
-                return apply(1/0, 1/0, ctx, f, [lhs, rhs]), 2
         raise NotYetImplemented()
 
 
@@ -276,6 +288,7 @@ def parseSingle(t, ctx, k):
             raise NotYetImplemented()
     else:
         raise NotYetImplemented()
+
 
 def parseParameters(params, fnctx, k):
     argnames = []

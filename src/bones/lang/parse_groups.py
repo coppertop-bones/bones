@@ -311,9 +311,9 @@ def PPCloser(tokenTag):
     else:
         return prettyNameByTag[tokenTag]
 
-def parseStructure(tokens, TRACE=False):
+def parseStructure(tokens, ctx, k, TRACE=False):
     stack = _Stack()
-    currentTG = stack.push(SnippetGroup(Missing, Missing))   # this one obviously doesn't need catching!!
+    currentTG = stack.push(SnippetGroup(Missing, Missing, ctx, k))   # this one obviously doesn't need catching!!
     openers = {
         L_PAREN : catchLParen,
         L_BRACKET : catchLBracket,
@@ -340,9 +340,9 @@ def parseStructure(tokens, TRACE=False):
         consumer = Missing
         while consumer is Missing:
             if currentTG._isInteruptable:
-                consumer = catchLoad(token, currentTG, stack)
-                if consumer is Missing: consumer = catchFromImport(token, currentTG, stack)
-                if consumer is Missing: consumer = catchKeyword(token, currentTG, stack)
+                consumer = catchLoad(token, currentTG, stack, ctx, k)
+                if consumer is Missing: consumer = catchFromImport(token, currentTG, stack, ctx, k)
+                if consumer is Missing: consumer = catchKeyword(token, currentTG, stack, ctx, k)
                 if consumer:
                     if TRACE:
                         f"{currentTG.PPDebug} != {PPDebug(token)} .1" >> PP
@@ -392,7 +392,7 @@ def parseStructure(tokens, TRACE=False):
                     raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentTG, token)
                 consumer = currentTG
             if opener:
-                consumer = opener(token, currentTG, stack)
+                consumer = opener(token, currentTG, stack, ctx, k)
                 if consumer:
                     currentTG = consumer
                     if TRACE:
@@ -435,7 +435,9 @@ class _Group(object):
         '_hasDot',
         '_hasComma',
         '_hasSemicolon',
-        '_numEmpty'
+        '_numEmpty',
+        'ctx',
+        'k',
     ]
 
     def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
@@ -511,7 +513,7 @@ class _Group(object):
         if self._startTok is Missing: self._startTok = tokenOrGroup
         self._endTok = tokenOrGroup
 
-    def __init__(self, parent, opener):
+    def __init__(self, parent, opener, ctx, k):
         self._id = _getId()
         self._isComplete = False
         self.parent = parent
@@ -535,6 +537,9 @@ class _Group(object):
         self._hasComma = False
         self._hasSemicolon = False
         self._numEmpty = 0
+
+        self.ctx = ctx
+        self.k = k
 
     def _startNewPhrase(self):
         self._tokens = _Tokens()
@@ -651,8 +656,8 @@ class _Group(object):
 class _Phrase(_Group):
     # the abstract base class for single phrase groups (e.g. type-lang)
 
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, ctx, k)
         self._phrase = Missing
 
     # @property
@@ -667,14 +672,14 @@ class _Phrases(_Group):
 
     __slots__ = ['_phrases', '_sep', '_emptyPolicy']
 
-    def __init__(self, parent, opener, sep, emptyPolicy):
+    def __init__(self, parent, opener, sep, emptyPolicy, ctx, k):
         if sep == COMMA_SEP:
             self._phrases = _DotOrCommaSep(',')
         elif sep == DOT_SEP:
             self._phrases = _DotOrCommaSep('.')
         elif sep in (COMMA_OR_DOT_SEP, NO_SEP):
             self._phrases = _DotOrCommaSep('#')
-        super().__init__(parent, opener)
+        super().__init__(parent, opener, ctx, k)
         self._sep = sep
         self._emptyPolicy = emptyPolicy
 
@@ -694,11 +699,11 @@ class _Phrases(_Group):
                             ErrSite(self.__class__, 'Illegal new line'),
                             self, tokenOrGroup
                         )
-                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                     self._phrases << phrase
                     self._startNewPhrase()
             elif cause == SECTION_END:
-                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                 self._phrases << phrase
                 self._startNewPhrase()
             else:
@@ -750,9 +755,9 @@ class _CommaSepDotSepPhrase(_Phrases):
 
     __slots__ = ['_row']
 
-    def __init__(self, parent, opener):
+    def __init__(self, parent, opener, ctx, k):
         self._row = _CommaSepDotSep()
-        super().__init__(parent, opener, DOT_SEP, NOTE_EMPTY)  # ERR_ON_EMPTY
+        super().__init__(parent, opener, DOT_SEP, NOTE_EMPTY, ctx, k)  # ERR_ON_EMPTY
 
     def _startNewCommaSection(self):
         self._phrases = _DotOrCommaSep('.')
@@ -785,9 +790,9 @@ class _SemiColonSepCommasSepDotNLSepPhrase(_CommaSepDotSepPhrase):
 
     __slots__ = ['_grid']
 
-    def __init__(self, parent, opener):
+    def __init__(self, parent, opener, ctx, k):
         self._grid = _SemiColonSepCommaSepDotSep()
-        super().__init__(parent, opener)
+        super().__init__(parent, opener, ctx, k)
 
     def _startNewRow(self):
         self._row = _CommaSepDotSep()
@@ -820,9 +825,9 @@ class _SemiColonSepCommasSepPhrase(_Phrases):
 
     __slots__ = ['_grid']
 
-    def __init__(self, parent, opener):
+    def __init__(self, parent, opener, ctx, k):
         self._grid = SemiColonSepCommaSep()
-        super().__init__(parent, opener, COMMA_SEP, NOTE_EMPTY)
+        super().__init__(parent, opener, COMMA_SEP, NOTE_EMPTY, ctx, k)
 
     def _startNewRow(self):
         self._phrases = _DotOrCommaSep(',')
@@ -850,7 +855,7 @@ class _SemiColonSepCommasSepPhrase(_Phrases):
 
 
 
-def _procesAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGroup):
+def _procesAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGroup, ctx, k):
     # check for assignments, converting ASSIGN_LEFT into ASSIGN_RIGHT
 
     # convert left assignments into terminal right assignments
@@ -869,6 +874,12 @@ def _procesAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGrou
         if isinstance(phrase[0], Token):
             if phrase[0].tag == ASSIGN_LEFT:
                 # move first token to end
+                if isinstance(phrase[1], FuncOrStructGroup):
+                    name = phrase[0].src
+                    style = phrase[1]._unaryBinaryOrStruct
+                    currentStyle = k.styleByName.setdefault(name, style)
+                    if currentStyle != style:
+                        raise Exception("Style changed")
                 phrase = phrase[1:] + [toAssignRight(phrase[0])]
             elif phrase[0].tag == CONTEXT_ASSIGN_LEFT:
                 # move first token to end
@@ -929,8 +940,8 @@ class SnippetGroup(_Phrases):
     _allowNLPhraseStart = True
     _isInteruptable = True
     __slots__ = []
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, DOT_SEP, IGNORE_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, DOT_SEP, IGNORE_EMPTY, ctx, k)
     def _finalise(self, tokenOrGroup):
         if self._tokens is Missing: raise ProgrammerError()
         # since a Snippet has no closing token we have to close when the main parsing loop calls _finalise
@@ -958,18 +969,18 @@ class SnippetGroup(_Phrases):
 # [...
 # **********************************************************************************************************************
 
-def catchLBracket(token, currentTG, stack):
+def catchLBracket(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACKET): return Missing
-    block = BlockGroup(currentTG, token)
+    block = BlockGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(block, token.indent)
     return stack.push(block)
 
-def catchLBracketBracket(token, currentTG, stack):
+def catchLBracketBracket(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACKET_BRACKET): return Missing
-    block = BlockGroup(currentTG, token)
+    block = BlockGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(block, token.indent)
     stack.push(block)
-    dp = ParametersGroup(block, token)
+    dp = ParametersGroup(block, token, ctx, k)
     block._params = dp
     return stack.push(dp)
 
@@ -978,8 +989,8 @@ class BlockGroup(_SemiColonSepCommasSepDotNLSepPhrase):
     _exactlyOneNameInPhrase = False
     _allowNLPhraseStart = True
     __slots__ = ['_params', '_tRet']
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, ctx, k)
         self._params = Missing
         self._tRet = Missing
     def _processCloserOrAnswerError(self, token):
@@ -1003,15 +1014,15 @@ class BlockGroup(_SemiColonSepCommasSepDotNLSepPhrase):
 # (...
 # **********************************************************************************************************************
 
-def catchLParen(token, currentTG, stack):
+def catchLParen(token, currentTG, stack, ctx, k):
     if not (token.tag == L_PAREN): return Missing
-    il = TupParenOrDestructureGroup(currentTG, token, False)
+    il = TupParenOrDestructureGroup(currentTG, token, False, ctx, k)
     currentTG._consumeToken(il, token.indent)
     return stack.push(il)
 
-def catchColonLParen(token, currentTG, stack):
+def catchColonLParen(token, currentTG, stack, ctx, k):
     if not (token.tag == COLON_L_PAREN): return Missing
-    il = TupParenOrDestructureGroup(currentTG, token, True)
+    il = TupParenOrDestructureGroup(currentTG, token, True, ctx, k)
     currentTG._consumeToken(il, token.indent)
     return stack.push(il)
 
@@ -1020,9 +1031,9 @@ class TupParenOrDestructureGroup(_SemiColonSepCommasSepPhrase):
     _allowNLPhraseStart = False
     _isInteruptable = True
     __slots__ = ['_isDestructure']
-    def __init__(self, parent, opener, isDestructure):
+    def __init__(self, parent, opener, isDestructure, ctx, k):
         self._isDestructure = isDestructure
-        super().__init__(parent, opener)
+        super().__init__(parent, opener, ctx, k)
     @property
     def tupleType(self):
         if self._isDestructure:
@@ -1072,33 +1083,33 @@ class TupParenOrDestructureGroup(_SemiColonSepCommasSepPhrase):
 # {... , {[..., {{..., {{[...
 # **********************************************************************************************************************
 
-def catchLBrace(token, currentTG, stack):
+def catchLBrace(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACE): return Missing
-    f = FuncOrStructGroup(currentTG, token, UNARY_OR_STRUCT, R_BRACE, COMMA_OR_DOT_SEP)
+    f = FuncOrStructGroup(currentTG, token, UNARY_OR_STRUCT, R_BRACE, COMMA_OR_DOT_SEP, ctx, k)
     currentTG._consumeToken(f, token.indent)
     return stack.push(f)
 
-def catchLBraceBracket(token, currentTG, stack):
+def catchLBraceBracket(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACE_BRACKET): return Missing
-    f = FuncOrStructGroup(currentTG, token, UNARY, R_BRACE, DOT_SEP)
+    f = FuncOrStructGroup(currentTG, token, UNARY, R_BRACE, DOT_SEP, ctx, k)
     currentTG._consumeToken(f, token.indent)
     stack.push(f)
-    dp = ParametersGroup(f, token)
+    dp = ParametersGroup(f, token, ctx, k)
     f._params = dp
     return stack.push(dp)
 
-def catchLBraceBrace(token, currentTG, stack):
+def catchLBraceBrace(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACE_BRACE): return Missing
-    f = FuncOrStructGroup(currentTG, token, BINARY, R_BRACE_BRACE, DOT_SEP)
+    f = FuncOrStructGroup(currentTG, token, BINARY, R_BRACE_BRACE, DOT_SEP, ctx, k)
     currentTG._consumeToken(f, token.indent)
     return stack.push(f)
 
-def catchLBraceBraceBracket(token, currentTG, stack):
+def catchLBraceBraceBracket(token, currentTG, stack, ctx, k):
     if not (token.tag == L_BRACE_BRACE_BRACKET): return Missing
-    f = FuncOrStructGroup(currentTG, token, BINARY, R_BRACE_BRACE, DOT_SEP)
+    f = FuncOrStructGroup(currentTG, token, BINARY, R_BRACE_BRACE, DOT_SEP, ctx, k)
     currentTG._consumeToken(f, token.indent)
     stack.push(f)
-    dp = ParametersGroup(f, token)
+    dp = ParametersGroup(f, token, ctx, k)
     f._params = dp
     return stack.push(dp)
 
@@ -1108,8 +1119,8 @@ class FuncOrStructGroup(_Phrases):
     _allowNLPhraseStart = True
     __slots__ = ['_params', '_tRet', '_unaryBinaryOrStruct', '_requiredCloser']
 
-    def __init__(self, parent, opener, unaryBinaryOrStruct, closer, sep):
-        super().__init__(parent, opener, sep, ERR_ON_EMPTY)
+    def __init__(self, parent, opener, unaryBinaryOrStruct, closer, sep, ctx, k):
+        super().__init__(parent, opener, sep, ERR_ON_EMPTY, ctx, k)
         self._params = Missing
         self._tRet = Missing
         self._unaryBinaryOrStruct = unaryBinaryOrStruct
@@ -1233,8 +1244,8 @@ class ParametersGroup(_Phrases):
 
     __slots__ = ['_actualParams']
 
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, COMMA_SEP, NOTE_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, COMMA_SEP, NOTE_EMPTY, ctx, k)
         assert parent._params is Missing
         parent._params = self
         self._actualParams = Missing
@@ -1270,20 +1281,20 @@ class ParametersGroup(_Phrases):
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
                 )
-            phrase2 = [Parameter(self, tok1, [])]
+            phrase2 = [Parameter(self, tok1, [], self.ctx, self.k)]
         else:
             tok1 = phrase[0]
             if tok1.tag == ASSIGN_LEFT:
                 # fred:num or fred: num
                 newNameToken = Token(tok1.srcId, tok1.src, NAME, tok1.indent, tok1.t, tok1.l1, tok1.l2, tok1.c1, tok1.c2, tok1.s1, tok1.s2)
-                phrase2 = [Parameter(self, newNameToken, phrase[1:])]
+                phrase2 = [Parameter(self, newNameToken, phrase[1:], self.ctx, self.k)]
             elif tok1.tag == NAME and (secondToken := phrase[1]).tag == ASSIGN_RIGHT:
                 # fred :num
                 firstTypeName = Token(tok1.srcId, secondToken.src, NAME, secondToken.indent, secondToken.t, secondToken.l1, secondToken.l2, secondToken.c1, secondToken.c2, secondToken.s1, secondToken.s2)
-                phrase2 = [Parameter(self, tok1, [firstTypeName] + phrase[2:])]
+                phrase2 = [Parameter(self, tok1, [firstTypeName] + phrase[2:], self.ctx, self.k)]
             elif len(phrase) >= 3 and tok1.tag == NAME and phrase[1].tag == COLON and phrase[2].tag == NAME:
                 # fred : name
-                phrase2 = [Parameter(self, tok1, phrase[2:])]
+                phrase2 = [Parameter(self, tok1, phrase[2:], self.ctx, self.k)]
             else:
                 raise GroupError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
@@ -1334,8 +1345,8 @@ class ParametersGroup(_Phrases):
 class Parameter(_Phrase):
     _isInteruptable = False
     __slots__ = ['nameToken', 'typePhrase']
-    def __init__(self, parent, nameToken, typePhrase):
-        super().__init__(parent, nameToken)
+    def __init__(self, parent, nameToken, typePhrase, ctx, k):
+        super().__init__(parent, nameToken, ctx, k)
         self.nameToken = nameToken
         self.typePhrase = typePhrase
     @property
@@ -1353,12 +1364,12 @@ class Parameter(_Phrase):
 # ([...
 # **********************************************************************************************************************
 
-def catchLParenBracket(token, currentTG, stack):
+def catchLParenBracket(token, currentTG, stack, ctx, k):
     if not (token.tag == L_PAREN_BRACKET): return Missing
-    t = FrameGroup(currentTG, token)
+    t = FrameGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(t, token.indent)
     stack.push(t)
-    k = FrameKeysGroup(t, token)
+    k = FrameKeysGroup(t, token, ctx, k)
     t._keys = k
     return stack.push(k)
 
@@ -1367,8 +1378,8 @@ class FrameGroup(_Phrases):
     _allowNLPhraseStart = False
     _isInteruptable = False
     __slots__ = ['_keys']
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY, ctx, k)
         self._keys = Missing
     def _processCloserOrAnswerError(self, token):
         if token.tag != R_PAREN: return prettyNameByTag[R_PAREN]
@@ -1388,8 +1399,8 @@ class FrameKeysGroup(_Phrases):
     _exactlyOneNameInPhrase = True
     _allowNLPhraseStart = False
     _isInteruptable = False
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, COMMA_SEP, IGNORE_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, COMMA_SEP, IGNORE_EMPTY, ctx, k)
     def _processCloserOrAnswerError(self, token):
         if token.tag != R_BRACKET: return prettyNameByTag[R_BRACKET]
         self._endTok = token
@@ -1408,17 +1419,17 @@ class FrameKeysGroup(_Phrases):
 # <:...
 # **********************************************************************************************************************
 
-def catchLAngleColon(token, currentTG, stack):
+def catchLAngleColon(token, currentTG, stack, ctx, k):
     if not (token.tag == L_ANGLE_COLON): return Missing
-    tttg = TypeLangGroup(currentTG, token)
+    tttg = TypeLangGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(tttg, token.indent)
     return stack.push(tttg)
 
 class TypeLangGroup(_Phrase):
     _isInteruptable = False
     __slots__ = []
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, ctx, k)
         self._isComplete = False
     def _processCloserOrAnswerError(self, token):
         if token.tag != R_ANGLE: return prettyNameByTag[R_ANGLE]
@@ -1462,7 +1473,7 @@ class TypeLangGroup(_Phrase):
 # keyword style calls
 # **********************************************************************************************************************
 
-def catchKeyword(token, currentTG, stack):
+def catchKeyword(token, currentTG, stack, ctx, k):
     if token.tag != KEYWORD_OR_ASSIGN_LEFT:
         return Missing
     if len(currentTG._tokens) == 0 or isinstance(currentTG, Parameter):
@@ -1473,7 +1484,7 @@ def catchKeyword(token, currentTG, stack):
     indentOverFirstToken = token.indent - currentTG._tokens[0].indent
     if (currentTG._tokens[0].l2 != token.l2) and not (indentOverFirstToken >= MIN_INDENT):
         return Missing
-    ketg = _KeywordGroup(currentTG, token)
+    ketg = _KeywordGroup(currentTG, token, ctx, k)
     return stack.push(ketg)
 
 
@@ -1508,7 +1519,7 @@ class _KeywordGroup(_Phrases):
             else:
                 phrase = self._tokens
                 if phrase:
-                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                     self._phrases << phrase
                     self._latestToken = phrase[-1]
                     self._startNewPhrase()
@@ -1522,7 +1533,7 @@ class _KeywordGroup(_Phrases):
         elif self._phraseState == SECTION_END:
             phrase = self._tokens
             if phrase:
-                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                 self._phrases << phrase
                 self._startNewPhrase()
             else:
@@ -1568,8 +1579,8 @@ class _KeywordGroup(_Phrases):
             self._tokens << tokenOrGroup
         return self
 
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, NO_SEP, NOTE_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, NO_SEP, NOTE_EMPTY, ctx, k)
         # temporarily steal the _tokens from the parent group and set theirs to missing
         # this will cause an error if we don't code _KeywordGroup correctly acting as a bug detector :)
         parentTokens = parent._tokens
@@ -1596,7 +1607,7 @@ class _KeywordGroup(_Phrases):
     def _processCloserOrAnswerError(self, token):
         phrase = self._tokens
         if phrase:
-            phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, token)
+            phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, token, self.ctx, self.k)
             self._phrases << phrase
             self._startNewPhrase()
         else:
@@ -1611,7 +1622,7 @@ class _KeywordGroup(_Phrases):
         if self._tokens is Missing: raise ProgrammerError()
         phrase = self._tokens
         if phrase:
-            phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+            phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
             self._phrases << phrase
             self._startNewPhrase()
         else:
@@ -1640,7 +1651,7 @@ class _KeywordGroup(_Phrases):
         phraseForParent << newNameToken
 
         # add (<args>)
-        args = TupParenOrDestructureGroup(self.parent, self._startTok, False)
+        args = TupParenOrDestructureGroup(self.parent, self._startTok, False, self.ctx, self.k)
         row = _CommaSepDotSep()
         for phrase in self._phrases:
             for tokenOrGroup in phrase:
@@ -1677,9 +1688,9 @@ class _KeywordGroup(_Phrases):
 # load ...
 # **********************************************************************************************************************
 
-def catchLoad(token, currentTG, stack):
+def catchLoad(token, currentTG, stack, ctx, k):
     if not (token.tag == NAME and token.src == 'load'): return Missing
-    lg = LoadGroup(currentTG, token)
+    lg = LoadGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(lg, token.indent)
     return stack.push(lg)
 
@@ -1691,8 +1702,8 @@ class LoadGroup(_Phrases):
 
     __slots__ = ['_awaitingTokens', '_lastLineBreakAndIndent']
 
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY, ctx, k)
         self._awaitingTokens = True
         self._phraseIndent = opener.indent
         self._lastLineBreakAndIndent = Missing
@@ -1813,9 +1824,9 @@ class LoadGroup(_Phrases):
 # from ... import ...
 # **********************************************************************************************************************
 
-def catchFromImport(token, currentTG, stack):
+def catchFromImport(token, currentTG, stack, ctx, k):
     if not (token.tag == NAME and token.src == 'from'): return Missing
-    fig = FromImportGroup(currentTG, token)
+    fig = FromImportGroup(currentTG, token, ctx, k)
     currentTG._consumeToken(fig, token.indent)
     return stack.push(fig)
 
@@ -1826,8 +1837,8 @@ class FromImportGroup(_Phrases):
 
     __slots__ = ['path', '_seenImport', '_awaitingTokensPostComma']
 
-    def __init__(self, parent, opener):
-        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY)
+    def __init__(self, parent, opener, ctx, k):
+        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY, ctx, k)
         self.path = Missing
         self._seenImport = False
         self._awaitingTokensPostComma = False
@@ -1981,17 +1992,17 @@ class FromImportGroup(_Phrases):
                 if indent > self._phraseIndent:
                     pass
                 else:
-                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                    phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                     self._phrases << phrase
                     self._startNewPhrase()
                     self._phraseState = GROUP_END
             elif cause == GROUP_END:
-                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                 self._phrases << phrase
                 self._startNewPhrase()
             else:
                 # happens when there is no new line and this is the last statement
-                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup)
+                phrase = _procesAssigmentsInPhrase(phrase, self._exactlyOneNameInPhrase, self, tokenOrGroup, self.ctx, self.k)
                 self._phrases << phrase
                 self._startNewPhrase()
         else:
