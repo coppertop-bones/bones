@@ -37,7 +37,7 @@ class Sym(object):
         return self._id
 
 
-class SymTable(object):
+class SymManager(object):
 
     def __init__(self):
         self._symByString = {}

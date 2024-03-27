@@ -13,7 +13,7 @@ from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.lang.core import LOCAL_SCOPE
 from bones.lang.types import litdec, litint, litsym, litsyms, littxt, litdate
-from bones.kernel.sym import SymTable
+from bones.kernel.sym import SymManager
 
 
 # The Storage Manager is responsible for storing values in bones
@@ -29,9 +29,9 @@ from bones.kernel.sym import SymTable
 class PythonStorageManager(object):
 
     def __init__(self):
-        self.syms = SymTable()
+        self.syms = SymManager()
         self._holderByModPathByName = {}
-        self.framesByContext = {}
+        self.framesBySymTab = {}
         self.stack = []
 
     def parseLitInt(self, s):
@@ -70,61 +70,61 @@ class PythonStorageManager(object):
     def newTable(self):
         raise NotYetImplemented()
 
-    def frameForCtx(self, ctx):
-        if (frame := self.framesByContext.get(ctx, Missing)) is Missing:
-            self.framesByContext[ctx] = frame = bframe(ctx, Missing)
+    def framesForSymTab(self, st):
+        if (frame := self.framesBySymTab.get(st, Missing)) is Missing:
+            self.framesBySymTab[st] = frame = bframe(st, Missing)
         return frame
 
-    def pushFrame(self, fnctx):
+    def pushFrame(self, fnst):
         if self.stack:
             current = self.stack[-1]
         else:
-            current = self.frameForCtx(fnctx)
-        self.stack.append(frame := bframe(fnctx, current))
+            current = self.framesForSymTab(fnst)
+        self.stack.append(frame := bframe(fnst, current))
         return frame
 
     def popFrame(self):
         self.stack = self.stack[:-1]
 
-    def bind(self, ctx, scope, name, value):
+    def bind(self, st, scope, name, value):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.frameForCtx(ctx)
+            frame = self.framesForSymTab(st)
         frame[name] = value
 
-    def getValue(self, ctx, scope, name):
+    def getValue(self, st, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.frameForCtx(ctx)
+            frame = self.framesForSymTab(st)
         return frame[name]
 
-    def getReturn(self, ctx, scope, name):
+    def getReturn(self, st, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.frameForCtx(ctx)
+            frame = self.framesForSymTab(st)
         return frame.values.get(name, Missing)
 
-    def getOverload(self, ctx, scope, name, numargs):
+    def getOverload(self, st, scope, name, numargs):
         # check local frame first (as the function may have been passed as an argument)
         if scope == LOCAL_SCOPE:
-            frame = self.stack[-1] if self.stack else self.frameForCtx(ctx)
+            frame = self.stack[-1] if self.stack else self.framesForSymTab(st)
         else:
             raise NotImplementedError()
         if (ov := frame.values.get(name, Missing)) is Missing:
-            # do the usual ctx search
-            fnMeta = ctx.fMetaForGet(name, scope)   # get the meta using just the name
-            ov = fnMeta.ctx.getOverload(name, numargs)  # get the fn using the name and number of args
+            # do the usual st search
+            fnMeta = st.fMetaForGet(name, scope)   # get the meta using just the name
+            ov = fnMeta.st.getOverload(name, numargs)  # get the fn using the name and number of args
             if ov is Missing: raise ProgrammerError()
         return ov
 
 
 
 class bframe(object):
-    def __init__(self, ctx, parent):
-        self.ctx = ctx
+    def __init__(self, st, parent):
+        self.st = st
         self.parent = parent
         self.values = {}
     def __setitem__(self, key, value):
@@ -137,7 +137,7 @@ class bframe(object):
     def depth(self):
         return self.parent.depth + 1 if self.parent else 1
     def __repr__(self):
-        return f'bframe: [{self.depth}]{self.ctx.path}'
+        return f'bframe: [{self.depth}]{self.st.path}'
 
 
 

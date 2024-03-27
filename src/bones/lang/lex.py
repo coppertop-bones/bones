@@ -25,6 +25,7 @@ START = next(_tagIdSeed)
 # WHITE SPACE
 WHITE_BREAK = next(_tagIdSeed)
 LEADING_SPACES = next(_tagIdSeed)
+NULL = next(_tagIdSeed)
 
 # NON-CODE
 LINE_COMMENT = next(_tagIdSeed)         # //
@@ -125,6 +126,7 @@ ILLEGAL2 = ILLEGAL_PARENT_VALUE_NAME
 _NUM_TAGS = next(_tagIdSeed)
 
 prettyNameByTag = [''] *_NUM_TAGS
+prettyNameByTag[NULL] = 'NULL'
 prettyNameByTag[LINE_COMMENT] = 'LINE_COMMENT'
 prettyNameByTag[INLINE_COMMENT] = 'INLINE_COMMENT'
 prettyNameByTag[BREAKOUT] = 'BREAKOUT'
@@ -405,8 +407,9 @@ Token = collections.namedtuple('Token', 'srcId, src, tag, indent, t, l1, l2, c1,
 # we might drop src for efficiency then this can be a regular array
 # id - token number in output
 # l1, l2 - line number
-# c1, c2 - offset in line       (maybe should be slice?)
-# s1, s2 - offset in src        (maybe should be slice?)
+# t - unknown                   OPEN: remove
+# c1, c2 - offset in line       OPEN: should be slice
+# s1, s2 - offset in src        OPEN: should be slice
 # indent - indent of line
 # Token.__str__ = Token.__repr__
 Token.__repr__ = lambda self:('{%s}' % (prettyNameByTag[self.tag])) if (self.tag in _atomicTags) else ('{%s:%s}' % (prettyNameByTag[self.tag], self.src))

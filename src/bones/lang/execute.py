@@ -11,7 +11,7 @@
 from coppertop.pipe import _Function
 from bones.lang.tc import load, fromimport, bindval, apply, getval, bfunc, lit, bindfn, getfamily, getoverload, litstruct, littup
 from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME
-from bones.lang.ctx import Overload
+from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
@@ -55,7 +55,7 @@ class TCInterpreter(object):
             # context.tt << f'apply {n}'
             sm = self.sm
             numargs = len(n.argnodes)
-            ov = sm.getOverload(n.ctx, n.fnnode.scope, n.fnnode.name, numargs)
+            ov = sm.getOverload(n.st, n.fnnode.scope, n.fnnode.name, numargs)
             args = [self.ex(argnode) for argnode in n.argnodes]
             if isinstance(ov, list):
                 # the list thing needs sorting out
@@ -76,12 +76,12 @@ class TCInterpreter(object):
             else:
                 raise ProgrammerError()
             if isinstance(fn, bfunc):
-                frame = sm.pushFrame(fn.ctx)
+                frame = sm.pushFrame(fn.st)
                 for name, arg in zip(fn.argnames, args):
-                    sm.bindval(frame.ctx, LOCAL_SCOPE, name, arg)
+                    sm.bindval(frame.st, LOCAL_SCOPE, name, arg)
                 for n2 in fn.body:
                     val = self.ex(n2)
-                if (ret := sm.getReturn(frame.ctx, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+                if (ret := sm.getReturn(frame.st, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
                 sm.popFrame()
                 return ret
             elif isinstance(fn, _Function):
@@ -93,21 +93,21 @@ class TCInterpreter(object):
         elif isinstance(n, bindval):
             # context.tt << f'bindval {n}'
             val = self.ex(n.lhnode)
-            self.sm.bindval(n.ctx, n.scope, n.name, val)
+            self.sm.bindval(n.st, n.scope, n.name, val)
             return val
 
         elif isinstance(n, getval):
             # context.tt << f'getval {n}'
-            return self.sm.getValue(n.ctx, n.scope, n.name)
+            return self.sm.getValue(n.st, n.scope, n.name)
 
         # elif isinstance(n, getoverload):
-        #     fnMeta = n.ctx.fMetaForGet(n.name, n.scope)
-        #     return fnMeta.ctx.getOverload(n.name, n.numargs)
+        #     fnMeta = n.st.fMetaForGet(n.name, n.scope)
+        #     return fnMeta.st.getOverload(n.name, n.numargs)
 
         elif isinstance(n, getfamily):
             # context.tt << f'getfamily {n}'
-            fnMeta = n.ctx.fMetaForGet(n.name, n.scope)
-            return fnMeta.ctx.getOverloadFamily(n.name)
+            fnMeta = n.st.fMetaForGet(n.name, n.scope)
+            return fnMeta.st.getOverloadFamily(n.name)
 
         elif isinstance(n, lit):
             return n

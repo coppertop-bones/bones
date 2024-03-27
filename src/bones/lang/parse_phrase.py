@@ -21,7 +21,7 @@ from bones.core.errors import ProgrammerError, NotYetImplemented, PathNotTested,
 from bones.core.sentinels import Missing, Null
 from bones.lang.core import RET_VAR_NAME
 from bones.lang.lex import Token, prettyNameByTag, \
-    START, INTEGER, DECIMAL, SYM, SYMS, TEXT, \
+    START, NULL, INTEGER, DECIMAL, SYM, SYMS, TEXT, \
     DATE, LOCALTIME_M, LOCALTIME_S, LOCALTIME_SS, \
     GLOBALTIME_M, GLOBALTIME_SS, GLOBALTIME_S, \
     GLOBALTIMESTAMP_M, GLOBALTIMESTAMP_S, GLOBALTIMESTAMP_SS, \
@@ -35,11 +35,11 @@ from bones.lang.parse_groups import \
     FuncOrStructGroup, TupParenOrDestructureGroup, BlockGroup, \
     TypeLangGroup, \
     FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
-from bones.lang.ctx import VMeta, FnMeta
+from bones.lang.symbol_table import VMeta, FnMeta
 from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet, apply, bfunc, load, fromimport, \
-    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getsubvalname, getsubvalindex
+    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getsubvalname, getsubvalindex, block
 from bones.lang.metatypes import BTTuple, BTStruct
-from bones.lang.ctx import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, newFnCtx, ArgCatcher
+from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI
 from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
@@ -47,13 +47,13 @@ from bones.lang.parse_type_lang import parseTypeLang
 from bones.lang.structs import tv
 
 
-def parseSnippet(snippetGroup, ctx, k):
+def parseSnippet(snippetGroup, st, k):
     # must not mutate sm
-    tcs = [parsePhrase(phrase, ctx, k) for phrase in snippetGroup.phrases]
-    return snippet(snippetGroup.tok1, snippetGroup.tok2, ctx, tcs)
+    tcs = [parsePhrase(phrase, st, k) for phrase in snippetGroup.phrases]
+    return snippet(snippetGroup.tok1, snippetGroup.tok2, st, tcs)
 
 
-def parseTupParenOrDestructureGroup(group, ctx, k):
+def parseTupParenOrDestructureGroup(group, st, k):
     tt = group.tupleType
     if tt == DESTRUCTURE:
         raise NotYetImplemented()
@@ -62,12 +62,12 @@ def parseTupParenOrDestructureGroup(group, ctx, k):
     elif tt == TUPLE_2D:
         raise NotYetImplemented()
     elif tt == TUPLE_OR_PAREN:
-        # of form `(a)`, i.e. no semi-colons and no commas - so just the one phrase and it's in the same ctx
+        # of form `(a)`, i.e. no semi-colons and no commas - so just the one phrase and it's in the same st
         # OPEN: possibly we might like to have multiple phrases in parentheses   x * (fred: 1 + 1. joe: fred * 2. joe+fred)
         # OPEN: how to specify a 1d or 2d single element tuple? Maybe Python style with a comma or ; however that
         #   sort of precludes Missing elements in a tuple
         phrase = group.grid[0][0]
-        tc = parsePhrase(phrase, ctx, k)
+        tc = parsePhrase(phrase, st, k)
         return TUPLE_OR_PAREN, [tc]
     elif tt == TUPLE_0_EMPTY:
         if isinstance(group.grid, _SemiColonSepCommaSepDotSep):
@@ -76,7 +76,7 @@ def parseTupParenOrDestructureGroup(group, ctx, k):
             for dotSepPhrase in commaSepDotSepPhrase:
                 dotSepTc = _DotOrCommaSep('.')
                 for phrase in dotSepPhrase:
-                    tc = parsePhrase(phrase, ctx, k)
+                    tc = parsePhrase(phrase, st, k)
                     dotSepTc << tc
                 commaSepDotSepTc << dotSepTc
             return TUPLE_0_EMPTY, commaSepDotSepTc
@@ -84,13 +84,21 @@ def parseTupParenOrDestructureGroup(group, ctx, k):
             commaSepPhrase = group.grid[0]
             dotSepTc = _DotOrCommaSep(',')
             for phrase in commaSepPhrase:
-                tc = parsePhrase(phrase, ctx, k)
+                tc = parsePhrase(phrase, st, k)
                 dotSepTc << tc
             return TUPLE_0_EMPTY, dotSepTc
         else:
             raise ProgrammerError()
     elif tt == TUPLE_1_EMPTY:
-        raise NotYetImplemented()
+        if isinstance(group.grid, SemiColonSepCommaSep):
+            commaSepPhrase = group.grid[0]
+            commaSepTc = _DotOrCommaSep(',')
+            for phrase in commaSepPhrase:
+                tc = parsePhrase(phrase, st, k)
+                commaSepTc << tc
+            return TUPLE_1_EMPTY, commaSepTc
+        else:
+            raise ProgrammerError()
     elif tt == TUPLE_2_EMPTY:
         raise NotYetImplemented()
     elif tt == TUPLE_3_EMPTY:
@@ -111,20 +119,20 @@ def snippetOrTc(phrases):
         return phrases
 
 
-def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
-    style = fOrName.literalstyle if isinstance(fOrName, bfunc) else ctx.styleOfName(fOrName)
+def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
+    style = fOrName.literalstyle if isinstance(fOrName, bfunc) else st.styleOfName(fOrName)
 
     if node is Missing:
         # possibilities
         # fn ()                     (fn may have more than one tuple afterward)
         if len(tokens) == 1:
-            x = parseSingle(tokens[0], ctx, k)
+            x = parseSingle(tokens[0], st, k)
             return x, 1
         elif len(tokens) > 1:
             next = tokens[1]
             if isinstance(next, TupParenOrDestructureGroup):
                 # e.g. fred(...)
-                tupleType, tup = parseTupParenOrDestructureGroup(next, ctx, k)
+                tupleType, tup = parseTupParenOrDestructureGroup(next, st, k)
                 if tupleType == TUPLE_OR_PAREN:
                     # fn (a)        i.e. passing a into fn
                     rhs = tup
@@ -132,7 +140,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                         f = fOrName
                     else:
                         f = getoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(tokens[0].tok1, next.tok2, ctx, f, rhs), 2
+                    return apply(tokens[0].tok1, next.tok2, st, f, rhs), 2
                 elif tupleType == TUPLE_0_EMPTY:
                     # fn(a,b,c)
                     if isinstance(tup, _SemiColonSepCommaSepDotSep):
@@ -150,7 +158,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                         f = fOrName
                     else:
                         f = getoverload(tokens[0].tok1, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(tokens[0].tok1, next.tok2, ctx, f, rhs), 2
+                    return apply(tokens[0].tok1, next.tok2, st, f, rhs), 2
                 else:
                     raise ProgrammerError()
             elif isinstance(next, Token):
@@ -160,7 +168,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                     if ctxWithFn is Missing:
                         f = fOrName
                     else:
-                        raise NotYetImplemented("need to copy every overload into the local ctx")
+                        raise NotYetImplemented("need to copy every overload into the local symtab")
                     return f, 1
                 else:
                     f = getfamily(tokens[0].tok1, ctxWithFn, fOrName, LOCAL_SCOPE)
@@ -174,21 +182,26 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
     elif style is unary:
         # noun unary            (unary may have tuples afterward)
         if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGroup):
-            tupleType, tup = parseTupParenOrDestructureGroup(postUnaryTok, ctx, k.sm)
+            tupleType, tup = parseTupParenOrDestructureGroup(postUnaryTok, st, k.sm)
             if tupleType == TUPLE_OR_PAREN:
                 # noun unary (...)
                 raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
-            else:
+            elif tupleType == TUPLE_1_EMPTY:
                 # noun unary(,args)
                 rhs = postUnaryTok.tok2
-                parenArgs = postUnaryTok.grid[0]
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)
-                raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
+                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(tup), LOCAL_SCOPE)
+                for i in range(len(tup)):
+                    if isinstance(tup[i], voidPhrase):
+                        tup[i] = node
+                        break
+                return apply(node.tok1, rhs, st, f, tup), 2
+            else:
+                raise SentenceError("error needs describing properly")
         else:
             # noun unary
             rhs = tokens[0].tok2
             f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)
-        return apply(node.tok1, tokens[0], ctx, f, [node]), 1
+        return apply(node.tok1, tokens[0], st, f, [node]), 1
 
 
     elif style is binary:
@@ -196,7 +209,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
         if len(tokens) < 2: raise SentenceError("incomplete phrase - {noun, binary} is missing args after the binary")
         postBinaryTok = tokens[1]
         if isinstance(postBinaryTok, TupParenOrDestructureGroup):
-            tupleType, tup = parseTupParenOrDestructureGroup(postBinaryTok, ctx, k.sm)
+            tupleType, tup = parseTupParenOrDestructureGroup(postBinaryTok, st, k.sm)
             if tupleType == TUPLE_OR_PAREN:
                 # noun binary (arg2)
                 arg2 = tup[0]
@@ -210,11 +223,11 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                 # OPEN: handle arg2(...)
                 raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
         else:
-            arg2 = parseSingle(postBinaryTok, ctx, k)
+            arg2 = parseSingle(postBinaryTok, st, k)
             rhs = arg2.tok2
             f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)      # OPEN handle partials
 
-        return apply(node.tok1, rhs, ctx, f, [node, arg2]), 2
+        return apply(node.tok1, rhs, st, f, [node, arg2]), 2
 
 
     elif style is ternary:
@@ -226,7 +239,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
         # handle token after ternary
         tok = tokens[i]
         if isinstance(tok, TupParenOrDestructureGroup):
-            tupleType, tup = parseTupParenOrDestructureGroup(tok, ctx, k.sm)
+            tupleType, tup = parseTupParenOrDestructureGroup(tok, st, k.sm)
             if tupleType == TUPLE_OR_PAREN:
                 # e.g. of form `noun ternary (arg2) arg3`
                 arg2 = tup[0]
@@ -238,14 +251,14 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                 f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)  # OPEN handle partials
                 raise NotYetImplemented("need to get the postTernaryTok two pipeable args and merge with paren args")
         else:
-            arg2 = parseSingle(tok, ctx, k)  # OPEN: handle post arg2 to parens
+            arg2 = parseSingle(tok, st, k)  # OPEN: handle post arg2 to parens
             f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
             i += 1
 
         # handle token after arg2
         tok = tokens[i]
         if isinstance(tok, TupParenOrDestructureGroup):
-            tupleType, tup = parseTupParenOrDestructureGroup(tok, ctx, k.sm)
+            tupleType, tup = parseTupParenOrDestructureGroup(tok, st, k.sm)
             if tupleType == TUPLE_OR_PAREN:
                 # e.g. of form `noun ternary arg2 (arg3)`
                 arg3 = tup[0]
@@ -256,38 +269,38 @@ def buildFnApplication(node, ctxWithFn, fOrName, ctx, tokens, k):
                 numargs = len(parenArgs)
                 raise NotYetImplemented("need to get the postTernaryTok two pipeable args and merge with paren args")
         else:
-            arg3 = parseSingle(tok, ctx, k)  # OPEN: handle post arg3 to parens
+            arg3 = parseSingle(tok, st, k)  # OPEN: handle post arg3 to parens
             i += 1
 
-        return apply(node.tok1, arg3.tok2, ctx, f, [node, arg2, arg3]), 3
+        return apply(node.tok1, arg3.tok2, st, f, [node, arg2, arg3]), 3
 
 
     else:
         raise NotYetImplemented()
 
 
-def parseSingle(t, ctx, k):
+def parseSingle(t, st, k):
     if isinstance(t, Token):
         tag = t.tag
         if tag == NAME:
             name = t.src
-            meta = ctx.fOrVMetaForGet(name, LOCAL_SCOPE)
+            meta = st.fOrVMetaForGet(name, LOCAL_SCOPE)
             if meta is Missing: raise SentenceError(f"unknown name - {name}")
             if isinstance(meta, VMeta):
-                return getval(t.tok1, meta.ctx, name, meta.t, LOCAL_SCOPE)
+                return getval(t.tok1, meta.st, name, meta.t, LOCAL_SCOPE)
             else:
-                return getfamily(t.tok1, meta.ctx, name, LOCAL_SCOPE)
+                return getfamily(t.tok1, meta.st, name, LOCAL_SCOPE)
         elif tag == INTEGER:
-            return lit(t.tok1, ctx, *k.sm.parseLitInt(t.src))
+            return lit(t.tok1, st, *k.sm.parseLitInt(t.src))
         elif tag == DECIMAL:
-            return lit(t.tok1, ctx, *k.sm.parseLitDec(t.src))
+            return lit(t.tok1, st, *k.sm.parseLitDec(t.src))
         elif tag == TEXT:
-            return lit(t.tok1, ctx, *k.sm.parseLitUtf8(t.src))
+            return lit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
         else:
             missingTag = prettyNameByTag[tag]
             raise NotYetImplemented()
     else:
-        raise NotYetImplemented()
+        return parsePhrase([t], st, k)
 
 
 def parseParameters(params, fnctx, k):
@@ -305,12 +318,12 @@ def parseParameters(params, fnctx, k):
     return argnames, tArgs
 
 
-def parsePhrase(tokens, ctx, k):
+def parsePhrase(tokens, st, k):
     # must not mutate sm
 
-    if not tokens: return voidPhrase(ctx)
+    if not tokens: return voidPhrase(0, 0, st)
 
-    lhs = Missing
+    node = Missing
 
     tokens = _queue(tokens[1:] if isinstance(tokens[0], Token) and tokens[0].tag == START else tokens)
 
@@ -321,9 +334,9 @@ def parsePhrase(tokens, ctx, k):
 
             if tag == SYMBOLIC_NAME:
                 name = t.src
-                meta = ctx.fMetaForGet(name, LOCAL_SCOPE)
+                meta = st.fMetaForGet(name, LOCAL_SCOPE)
                 if meta is Missing: raise DictionaryError(f"unknown function - {name}", ErrSite("unknown function"))
-                lhs, numConsumed = buildFnApplication(lhs, meta.ctx, name, ctx, tokens, k)
+                node, numConsumed = buildFnApplication(node, meta.st, name, st, tokens, k)
                 tokens >> numConsumed
 
             elif tag == NAME:
@@ -331,20 +344,20 @@ def parsePhrase(tokens, ctx, k):
                 # for the moment check every name for dots - could (should?) be done by lexer
                 names = name.split('.')
                 name, otherNames = (names[0], names[1:]) if len(names) > 1 else (name, [])
-                meta = ctx.fOrVMetaForGet(name, LOCAL_SCOPE)
+                meta = st.fOrVMetaForGet(name, LOCAL_SCOPE)
                 if meta is Missing:
                     raise SentenceError(f"unknown name - {name}", ErrSite("unknown name"))
                 if isinstance(meta, FnMeta):
                     if otherNames:
                         raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
-                    lhs, numConsumed = buildFnApplication(lhs, meta.ctx, name, ctx, tokens, k)
+                    node, numConsumed = buildFnApplication(node, meta.st, name, st, tokens, k)
                     tokens >> numConsumed
-                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGroup) and name in ctx.argCatcher.inferredArgnames:
+                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGroup) and name in st.argCatcher.inferredArgnames:
                     if otherNames:
                         raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
                     # design decision - decide that it is the latter
-                    meta = ctx.changeVMetaToFnMeta(name)
+                    meta = st.changeVMetaToFnMeta(name)
                     # these don't make sense:
                     # `arg1 inferredArg` unary? but inferredArg could be a symbol so an object object apply
                     # `arg1 inferredArg arg2` binary? but inferredArg could be a symbol so an object object apply
@@ -353,101 +366,101 @@ def parsePhrase(tokens, ctx, k):
                         # `arg1 inferredArg(,,...) arg2` binary with partial
                         # `arg1 inferredArg(,,,...) arg2 arg3` ternary with partial
                     # however to keep the usage of inferred arguments we'll limit inferred functions to fn(...) form
-                    if lhs is not Missing: raise SentenceError(f"object {name}(...) not allowed", ErrSite("object name(...) not allowed"))
-                    # TODO add a test to check that `{1 + f(x)}` is handled correctly (i.e. the binary + doesn't appear in lhs here)
-                    lhs, numConsumed = buildFnApplication(lhs, meta.ctx, name, ctx, tokens, k)
-                    numArgs = lhs.fnnode.numargs
+                    if node is not Missing: raise SentenceError(f"object {name}(...) not allowed", ErrSite("object name(...) not allowed"))
+                    # TODO add a test to check that `{1 + f(x)}` is handled correctly (i.e. the binary + doesn't appear in node here)
+                    node, numConsumed = buildFnApplication(node, meta.st, name, st, tokens, k)
+                    numArgs = node.fnnode.numargs
                     f = assumedfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,) * numArgs), TBI, Missing, nullary)
-                    overload = ctx.bindFn(name, f)    # add the function to the local ctx - the TBIs will be converted to type variables later
+                    overload = st.bindFn(name, f)    # add the function to the local symtab - the TBIs will be converted to type variables later
                     tokens >> numConsumed
                 else:
-                    lhs = getval(t, meta.ctx, name, LOCAL_SCOPE)
-                    lhs.tOut = meta.t
+                    node = getval(t, meta.st, name, LOCAL_SCOPE)
+                    node.tOut = meta.t
                     tokens >> 1
                     if otherNames:
                         for name in otherNames:
-                            lhs = getsubvalname(t, ctx, lhs, name)
+                            node = getsubvalname(t, st, node, name)
 
             elif tag == PARENT_VALUE_NAME:
                 name = t.src
-                meta = ctx.vMetaForGet(name, PARENT_SCOPE)
+                meta = st.vMetaForGet(name, PARENT_SCOPE)
                 if meta is Missing: raise SentenceError(f"unknown parent value name - {name}")
                 raise NotYetImplemented()
 
             elif tag == CONTEXT_NAME:
                 name = t.src
-                meta = ctx.fOrVMetaForGet(name, CONTEXT_NAME)
+                meta = st.fOrVMetaForGet(name, CONTEXT_NAME)
                 if meta is Missing: raise SentenceError(f"unknown context name - {name}")
                 raise NotYetImplemented()
 
             elif tag == GLOBAL_NAME:
                 name = t.src
-                meta = ctx.vMetaForGet(name, GLOBAL_SCOPE)
+                meta = st.vMetaForGet(name, GLOBAL_SCOPE)
                 if meta is Missing: raise SentenceError(f"unknown parent value name - {name}")
                 raise NotYetImplemented()
 
             elif tag == ASSIGN_RIGHT:
                 name = t.src
-                # take care with ctx here - probably needs careful thinking through
-                if isinstance(lhs, bfunc):
-                    # meta = ctx.fMetaForBind(name, LOCAL_SCOPE)
+                # take care with st here - probably needs careful thinking through
+                if isinstance(node, bfunc):
+                    # meta = st.fMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
                     #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
                     # more may need to happen here - e.g. check for style tag
-                    ctx.defFnMeta(name, TBI, LOCAL_SCOPE)   # create a slot in the ctx for the fn
-                    ctx.bindFn(name, lhs)       # add it to the overloads (it will be queued if it needs inferring)
-                    currentStyle = k.styleByName.setdefault(name, lhs.literalstyle)
-                    if lhs.literalstyle != currentStyle:
+                    st.defFnMeta(name, TBI, LOCAL_SCOPE)   # create a slot in the symtab for the fn
+                    st.bindFn(name, node)       # add it to the overloads (it will be queued if it needs inferring)
+                    currentStyle = k.styleByName.setdefault(name, node.literalstyle)
+                    if node.literalstyle != currentStyle:
                         raise NotYetImplemented("Note that style has been changed")
-                    lhs = bindfn(min(t.tok1, lhs.tok1), max(t.tok2, lhs.tok2), ctx, name, lhs, LOCAL_SCOPE)
+                    node = bindfn(min(t.tok1, node.tok1), max(t.tok2, node.tok2), st, name, node, LOCAL_SCOPE)
                     tokens >> 1
                 else:
-                    # meta = ctx.vMetaForBind(name, LOCAL_SCOPE)
+                    # meta = st.vMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
                     #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
-                    ctx.defVMeta(name, TBI, LOCAL_SCOPE)
+                    st.defVMeta(name, TBI, LOCAL_SCOPE)
                     #HACK
-                    lhs = lhs[0] if isinstance(lhs, list) else lhs
-                    lhs = bindval(t.tok1, t.tok2, ctx, name, lhs, LOCAL_SCOPE)
+                    node = node[0] if isinstance(node, list) else node
+                    node = bindval(t.tok1, t.tok2, st, name, node, LOCAL_SCOPE)
                     tokens >> 1
 
             elif tag == CONTEXT_ASSIGN_RIGHT:
                 name = t.src
-                meta = ctx.fOrVMetaForBind(name, CONTEXT_SCOPE)
+                meta = st.fOrVMetaForBind(name, CONTEXT_SCOPE)
                 raise NotYetImplemented()
 
             elif tag == GLOBAL_ASSIGN_RIGHT:
                 name = t.src
-                meta = ctx.vMetaForBind(name, GLOBAL_SCOPE)
+                meta = st.vMetaForBind(name, GLOBAL_SCOPE)
                 if meta is not Missing:
                     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
                 else:
-                    ctx.defVMeta(name, TBI, GLOBAL_SCOPE)
-                    lhs = bindval(ctx, name, lhs, GLOBAL_SCOPE)
+                    st.defVMeta(name, TBI, GLOBAL_SCOPE)
+                    node = bindval(st, name, node, GLOBAL_SCOPE)
                     tokens >> 1
 
             elif tag == INTEGER:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitInt(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitInt(t.src))
                 tokens >> 1
 
             elif tag == DECIMAL:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitDec(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitDec(t.src))
                 tokens >> 1
 
             elif tag == TEXT:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitUtf8(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
                 tokens >> 1
 
             elif tag == SYM:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitSym(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitSym(t.src))
                 tokens >> 1
 
             elif tag == SYMS:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitSyms(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitSyms(t.src))
                 tokens >> 1
 
             elif tag == DATE:
-                lhs = lit(t.tok1, ctx, *k.sm.parseLitDate(t.src))
+                node = lit(t.tok1, st, *k.sm.parseLitDate(t.src))
                 tokens >> 1
 
             elif tag in (
@@ -456,85 +469,101 @@ def parsePhrase(tokens, ctx, k):
             ):
                 raise NotYetImplemented()
 
+            elif tag == ASSIGN_LEFT:
+                k.dumpLines(t.srcId, t.l1-3, t.l2)
+                raise ProgrammerError("Looks like the grouping hasn't worked proprerly", ErrSite("Encountered ASSIGN_LEFT"))
+
+            elif tag == NULL:
+                return voidPhrase(t.tok1, t.tok2, st)
+
             else:
-                if tag == ASSIGN_LEFT:
-                    k.dumpLines(t.srcId, t.l1-3, t.l2)
-                    raise ProgrammerError("Looks like the grouping hasn't worked proprerly", ErrSite("Encountered ASSIGN_LEFT"))
-                else: raise ProgrammerError()
+                raise ProgrammerError()
 
         else:
 
             if isinstance(t, FuncOrStructGroup):
-                if len(tokens) == 1: raise Exception("doesn't make sense to have just a function or a struct by itself on a line")
-                elif t._unaryBinaryOrStruct == STRUCT:
+                if t._unaryBinaryOrStruct == STRUCT:
                     # create the litstruct and the struct type
                     vs, names, ts = [], [], []
                     for v, nameToken in t.phrases:
                         names.append(k.sm.parseLitSym(nameToken.src)[1])
-                        node = parsePhrase([v], ctx, k)
+                        node = parsePhrase([v], st, k)
                         vs.append(node)
                         ts.append(node.tOut)
                     tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
                     tvObj = tv(tStruct, dict(zip(names, vs)))
                     tokens >> 1
-                    lhs = litstruct(t.tok1, t.tok2, ctx, tvObj)
+                    node = litstruct(t.tok1, t.tok2, st, tvObj)
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:
                     raise NotYetImplemented()
                 else:
-                    fnCtx = newFnCtx(ctx)
+                    # OPRN: create the fnSymTab in the grouping stage and add explicit parameters and assigned variables there
+                    # implicit args need to be done here
+                    fnSt = fnSymTab(st)
                     if t._params is Missing:
-                        fnCtx.argCatcher = ArgCatcher([])
+                        fnSt.argCatcher = ArgCatcher([])
                     else:
-                        argnames, tArgs = parseParameters(t._params, fnCtx, k.sm)
+                        argnames, tArgs = parseParameters(t._params, fnSt, k.sm)
                     tRet = TBI if t._tRet is Missing else parseTypeLang(t._tRet, k)
-                    body = [parsePhrase(phrase, fnCtx, k) for phrase in t.phrases]
+                    body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
                     if t._params is Missing:
-                        argnames = fnCtx.argCatcher.inferredArgnames
+                        argnames = fnSt.argCatcher.inferredArgnames
                         argnames.sort(key=_inDictionaryOrder)
                         tArgs = [TBI] * len(argnames)
                     if t._unaryBinaryOrStruct == UNARY: style = unary
                     elif t._unaryBinaryOrStruct == BINARY: style = binary
                     else: raise ProgrammerError()
-                    fnCtx.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
-                    f = bfunc(t.tok1, t.tok1, fnCtx, argnames, BTTuple(*tArgs), tRet, body, style)
+                    fnSt.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
+                    f = bfunc(t.tok1, t.tok1, fnSt, argnames, BTTuple(*tArgs), tRet, body, style)
                     tokens[0] = f
-                    lhs, numConsumed = buildFnApplication(lhs, Missing, f, ctx, tokens, k.sm)
+                    # OPEN: handle style conversion and assignment (as we're not always calling a function)
+                    node, numConsumed = buildFnApplication(node, Missing, f, st, tokens, k.sm)
                     tokens >> numConsumed
 
             elif isinstance(t, TupParenOrDestructureGroup):
                 if t.tupleType == TUPLE_OR_PAREN:
-                    if lhs is Missing:
+                    if node is Missing:
                         # of form `(a)` - is it a tuple of one element or a parenthesis?
                         # for the moment we will assume a parenthesis -> 1 entup to make a one tuple? like q
-                        tupleType, tup = parseTupParenOrDestructureGroup(t, ctx, k)
-                        lhs = tup
+                        tupleType, tup = parseTupParenOrDestructureGroup(t, st, k)
+                        node = tup
                         tokens >> 1
                     else:
                         # two possible intentions
                         #   1) object paren, intended as an object object apply OR
                         #   2) fn paren
                         # three cases -
-                        #   1) lhs is a function (but that is handled in the NAME case)
-                        #   2) lhs is a value - known from the name space
-                        #   3) lhs is TBI - i.e. a parameter
+                        #   1) node is a function (but that is handled in the NAME case)
+                        #   2) node is a value - known from the name space
+                        #   3) node is TBI - i.e. a parameter
                         # OPEN: could set this up to be handled in inference or even later but for now assume the TBI is a function
 
                         # create a fn with generic tArgs and tRet
-                        name = lhs.name
-                        if ctx.argCatcher and name in ctx.argCatcher.inferredArgnames:
-                            ctx.changeVMetaToFnMeta(name)
-                        tupleType, tup = parseTupParenOrDestructureGroup(t, ctx, k)
+                        name = node.name
+                        if st.argCatcher and name in st.argCatcher.inferredArgnames:
+                            st.changeVMetaToFnMeta(name)
+                        tupleType, tup = parseTupParenOrDestructureGroup(t, st, k)
                         numArgs = 1
-                        fnode = getoverload(t.tok1, ctx, name, numArgs, LOCAL_SCOPE)      # OPEN handle partials
+                        fnode = getoverload(t.tok1, st, name, numArgs, LOCAL_SCOPE)      # OPEN handle partials
                         f = bfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,)*numArgs), TBI, Missing, unary)
-                        overload = ctx.bindFn(name, f)
-                        lhs = apply(t.tok1, t.tok2, ctx, fnode, tup)
+                        overload = st.bindFn(name, f)
+                        node = apply(t.tok1, t.tok2, st, fnode, tup)
                         tokens >> 1
                 else:
                     raise ProgrammerError("all other cases should be captured in buildFnApplication")
 
             elif isinstance(t, BlockGroup):
-                raise NotYetImplemented()
+                blockSt = blockSymTab(st)
+                if t._params is Missing:
+                    argnames, tArgs = [], []
+                else:
+                    argnames, tArgs = parseParameters(t._params, blockSt, k.sm)
+                tRet = TBI if t._tRet is Missing else parseTypeLang(t._tRet, k)
+                body = [parsePhrase(phrase, blockSt, k) for phrase in t.phrases]
+                blockSt.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
+                node = block(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRet, body)
+                tokens[0] = node
+                tokens >> 1
 
             elif isinstance(t, FrameGroup):
                 raise NotYetImplemented()
@@ -545,8 +574,8 @@ def parsePhrase(tokens, ctx, k):
                 for phrase in t.phrases:
                     for tok in phrase:
                         paths.append(tok.src)
-                lhs = load(t.tok1, t.tok2, ctx, paths)
-                k.loadModules(lhs.paths)
+                node = load(t.tok1, t.tok2, st, paths)
+                k.loadModules(node.paths)
                 tokens >> 1
 
             elif isinstance(t, FromImportGroup):
@@ -564,8 +593,8 @@ def parsePhrase(tokens, ctx, k):
                         else:
                             raise NotYetImplemented(f'tok: {tok}')
                     names.append(name)
-                lhs = fromimport(t.tok1, t.tok2, ctx, t.path, names)
-                k.importSymbols(lhs.path, lhs.names, lhs.ctx)
+                node = fromimport(t.tok1, t.tok2, st, t.path, names)
+                k.importSymbols(node.path, node.names, node.st)
                 tokens >> 1
 
             elif isinstance(t, TypeLangGroup):
@@ -574,7 +603,7 @@ def parsePhrase(tokens, ctx, k):
             else:
                 raise ProgrammerError()
 
-    return lhs
+    return node
 
 
 def _inDictionaryOrder(x):

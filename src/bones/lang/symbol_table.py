@@ -21,7 +21,7 @@ from bones.lang.tc import bfunc
 from bones.lang.metatypes import BTUnion, BTFn, BTOverload
 from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 
-# Ctx
+# SymTab
 #   holds all the type information for an environment / context
 #   holds the actual callable functions defined in it
 #   (values are stored by the storage manager)
@@ -37,7 +37,7 @@ from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCO
 # name that refers to a value - so before accessing a name we ask for which context is in and it's type
 #
 # consider
-# {f(x)} - parser figures f is a function and can update the ctx accordingly, x is very ambiguous
+# {f(x)} - parser figures f is a function and can update the symtab accordingly, x is very ambiguous
 # {x f} - this could be noun unary or noun noun - the parser must state it unaryOrNoun, and similarly for {x f y} and {x f y z}
 #
 # so by the time we are inferring, the fact of whether f is a function or a value has been determined
@@ -46,7 +46,7 @@ from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCO
 #
 # in which case we go down the rabbit hole until we hit a usage of f and the valueOrFnNess ripples up the lexical scopes
 #
-# so before querying a name we need it's meta - what is it and which ctx does it belong to
+# so before querying a name we need it's meta - what is it and which symtab does it belong to
 
 
 
@@ -57,9 +57,9 @@ def ppScope(scope):
     if scope == CONTEXT_SCOPE: return 'contextual'
     if scope == GLOBAL_SCOPE: return 'global'
 
-VMeta = namedtuple('VMeta', ['t', 'ctx'])
-FnMeta = namedtuple('FnMeta', ['t', 'ctx'])         # actual type schemas are kept in the overloads
-TMeta = namedtuple('TMeta', ['t', 'ctx'])
+VMeta = namedtuple('VMeta', ['t', 'st'])
+FnMeta = namedtuple('FnMeta', ['t', 'st'])         # actual type schemas are kept in the overloads
+TMeta = namedtuple('TMeta', ['t', 'st'])
 
 _anonSeed = itertools.count(start=1)
 
@@ -162,34 +162,34 @@ class Overload(object):
 
 
 
-class Ctx(object):
+class SymTab(object):
 
     __slots__ = [
         'name', 'kernel',
-        '_lexicalParentCtx', '_contextCtx', '_moduleCtx', '_globalCtx',
+        '_lexicalParentSymTab', '_contextSymTab', '_moduleSymTab', '_globalSymTab',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
         '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newOverloadsByNumArgs',
         'argCatcher', 'inferring'
     ]
 
-    def __init__(self, kernel, lexicalParentCtx, contextCtx, moduleCtx, globalCtx, name):
-        # if a module then moduleCtx and lexicalParentCtx will be missing
-        # if a top level function then lexicalParentCtx will be missing
+    def __init__(self, kernel, lexicalParentSt, contextSt, moduleSt, globalSt, name):
+        # if a module then moduleSt and lexicalParentSt will be missing
+        # if a top level function then lexicalParentSt will be missing
         self.name = 'anon'+str(next(_anonSeed)) if name is Missing else name
         self.kernel = kernel
-        self._lexicalParentCtx = lexicalParentCtx
-        self._contextCtx = contextCtx
-        self._moduleCtx = moduleCtx
-        self._globalCtx = globalCtx
+        self._lexicalParentSymTab = lexicalParentSt
+        self._contextSymTab = contextSt
+        self._moduleSymTab = moduleSt
+        self._globalSymTab = globalSt
 
         self._vMetaByName = {}
         self._fnMetaByName = {}
-        self._tMetaByName = Missing if globalCtx else {}     # protect ourselves slightly here
+        self._tMetaByName = Missing if globalSt else {}     # protect ourselves slightly here
         self._overloadsByNumArgs = [{} for i in range(MAX_NUM_ARGS + 1)]
 
         self._newVMetaByName = {}
         self._newFnMetaByName = {}
-        self._newTMetaByName = Missing if globalCtx else {}  # and here
+        self._newTMetaByName = Missing if globalSt else {}  # and here
         self._newOverloadsByNumArgs = [{} for i in range(MAX_NUM_ARGS + 1)]
 
         self.argCatcher = Missing
@@ -225,7 +225,7 @@ class Ctx(object):
         elif scope == CONTEXT_SCOPE:
             raise NotYetImplemented()
         elif scope == GLOBAL_SCOPE:
-            m = self._globalCtx.vMetaForGet(name, LOCAL_SCOPE)
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
             return m
 
     def fMetaForGet(self, name, scope):
@@ -233,10 +233,10 @@ class Ctx(object):
             m = self._newFnMetaByName.get(name, Missing)
             if m is Missing:
                 m = self._fnMetaByName.get(name, Missing)
-            if m is Missing and self._lexicalParentCtx is not Missing:
-                m = self._lexicalParentCtx.fMetaForGet(name, LOCAL_SCOPE)         # this will go all the way up to the module
-            if m is Missing and self._moduleCtx is not Missing:
-                m = self._moduleCtx.fMetaForGet(name, LOCAL_SCOPE)
+            if m is Missing and self._lexicalParentSymTab is not Missing:
+                m = self._lexicalParentSymTab.fMetaForGet(name, LOCAL_SCOPE)         # this will go all the way up to the module
+            if m is Missing and self._moduleSymTab is not Missing:
+                m = self._moduleSymTab.fMetaForGet(name, LOCAL_SCOPE)
             return m
         elif scope == CONTEXT_SCOPE:
             raise NotYetImplemented()
@@ -244,9 +244,9 @@ class Ctx(object):
             raise ProgrammerError()
 
     def tMetaForGet(self, name):
-        m = self._globalCtx._newTMetaByName.get(name, Missing)
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
         if m is Missing:
-            m = self._globalCtx._tMetaByName.get(name, Missing)
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
         return m
 
     def fOrVMetaForGet(self, name, scope):
@@ -265,7 +265,7 @@ class Ctx(object):
         elif scope == CONTEXT_SCOPE:
             raise NotYetImplemented()
         elif scope == GLOBAL_SCOPE:
-            m = self._globalCtx.vMetaForGet(name, LOCAL_SCOPE)
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
             return m
         else:
             raise ProgrammerError()
@@ -282,31 +282,35 @@ class Ctx(object):
             raise ProgrammerError()
 
     def tMetaForBind(self, name):
-        m = self._globalCtx._newTMetaByName.get(name, Missing)
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
         if m is Missing:
-            m = self._globalCtx._tMetaByName.get(name, Missing)
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
         return m
 
 
     def defVMeta(self, name, t, scope):
         if scope == LOCAL_SCOPE:
-            if name in self._newVMetaByName or name in self._vMetaByName: raise NotYetImplemented("Can't merge or redefine the types of values yet")
-            if name in self._newFnMetaByName or name in self._fnMetaByName: raise NotYetImplemented("A name can only refer to a value or an fn")
+            currentMeta = self._newVMetaByName.get(name, Missing)
+            if currentMeta is Missing: currentMeta = self._vMetaByName.get(name, Missing)
+            if currentMeta is not Missing and currentMeta.t != t:
+                raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            if name in self._newFnMetaByName or name in self._fnMetaByName:
+                raise NotYetImplemented("A name can only refer to a value or an fn")
             meta = VMeta(t, self)
             self._newVMetaByName[name] = meta
             return meta
         elif scope == CONTEXT_SCOPE:
             raise NotYetImplemented()
         elif scope == GLOBAL_SCOPE:
-            if name in self._globalCtx._vMetaByName or name in self._globalCtx._newVMetaByName: raise NotYetImplemented("Can't merge or redefine the types of values yet")
-            meta = VMeta(t, self._globalCtx)
-            self._globalCtx._newVMetaByName[name] = meta
+            if name in self._globalSymTab._vMetaByName or name in self._globalSymTab._newVMetaByName: raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            meta = VMeta(t, self._globalSymTab)
+            self._globalSymTab._newVMetaByName[name] = meta
             return meta
         else:
             raise ProgrammerError()
 
     def defFnMeta(self, name, t, scope):
-        if self._globalCtx is Missing: raise ScopeError("Can't define function in global scope")
+        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
         if scope == LOCAL_SCOPE:
             if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
             if name not in self._fnMetaByName or name not in self._newFnMetaByName:
@@ -317,8 +321,8 @@ class Ctx(object):
             raise ProgrammerError()
 
     def defTMeta(self, name, t):
-        if name in self._globalCtx._newTMetaByName or name in self._globalCtx._tMetaByName: raise ProgrammerError()
-        self._globalCtx._newTMetaByName[name] = t
+        if name in self._globalSymTab._newTMetaByName or name in self._globalSymTab._tMetaByName: raise ProgrammerError()
+        self._globalSymTab._newTMetaByName[name] = t
 
 
     def commitChanges(self):
@@ -328,7 +332,7 @@ class Ctx(object):
     def bindFn(self, name, fn):
         if name not in self._fnMetaByName and name not in self._newFnMetaByName: raise ProgrammerError()
         if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, bfunc)) and fn != TBI: raise ProgrammerError()
-        if self._globalCtx is Missing: raise ScopeError("Can't define function in global scope")
+        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
         if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         if not self.hasF(name): raise ProgrammerError()
         numargs = fn.numargs
@@ -352,14 +356,14 @@ class Ctx(object):
     @property
     def path(self):
         answer = ''
-        if self._lexicalParentCtx is not Missing:
-            answer += self._lexicalParentCtx.path
-        elif self._moduleCtx is not Missing:
-            answer += self._moduleCtx.path
+        if self._lexicalParentSymTab is not Missing:
+            answer += self._lexicalParentSymTab.path
+        elif self._moduleSymTab is not Missing:
+            answer += self._moduleSymTab.path
         return self.name if answer == '' else answer + '.' + self.name
 
     def __repr__(self):
-        return f'Ctx<{self.path}>'
+        return f'SymTab<{self.path}>'
 
     def updateMetaType(self, name, currentMeta, t):
         if isinstance(currentMeta, VMeta):
@@ -379,11 +383,14 @@ class Ctx(object):
 
 
 
-def newFnCtx(lexicalParentCtx):
-    if lexicalParentCtx._globalCtx is Missing:
+def fnSymTab(lexicalParentSt):
+    if lexicalParentSt._globalSymTab is Missing:
         raise ProgrammerError()
-    return Ctx(lexicalParentCtx.kernel, lexicalParentCtx, lexicalParentCtx._contextCtx, lexicalParentCtx._moduleCtx, lexicalParentCtx._globalCtx, Missing)
+    return SymTab(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
 
+def blockSymTab(lexicalParentSt):
+    # OPEN: implement properly - args are local all others are shared
+    return lexicalParentSt
 
 
 class _TBIQueue(object):

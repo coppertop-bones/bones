@@ -26,12 +26,12 @@ _nodeseed = itertools.count(start=1)
 # **********************************************************************************************************************
 
 class tcnode(object):
-    __slots__ = ['id', 'tok1', 'tok2', 'ctx', 'tOut']
-    def __init__(self, tok1, tok2, ctx):
+    __slots__ = ['id', 'tok1', 'tok2', 'st', 'tOut']
+    def __init__(self, tok1, tok2, st):
         self.id = next(_nodeseed)
         self.tok1 = tok1
         self.tok2 = tok2
-        self.ctx = ctx
+        self.st = st
         self.tOut = TBI
     def __eq__(self, other):
         if other.__class__ != self.__class__: return False
@@ -44,7 +44,7 @@ class tcnode(object):
         return f'tcnode: {self.nodepath} has no repr {type(self)}'
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.id}'
+        return f'{self.st.path}.{self.id}'
 
 
 # **********************************************************************************************************************
@@ -53,15 +53,15 @@ class tcnode(object):
 
 class snippet(tcnode):
     __slots__ = ['nodes']
-    def __init__(self, tok1, tok2, ctx, nodes):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, nodes):
+        super().__init__(tok1, tok2, st)
         self.nodes = nodes
     def PPTC(self, depth, report):
         report << TcReportLine(self, depth, f'snippet: ')
         for node in self.nodes:
             node.PPTC(depth + 1, report)
     def __repr__(self):
-        return f'snippet: {self.ctx.path}.{self.id}'
+        return f'snippet: {self.st.path}.{self.id}'
 
 
 # **********************************************************************************************************************
@@ -70,8 +70,8 @@ class snippet(tcnode):
 
 class apply(tcnode):
     __slots__ = ['fnnode', 'argnodes', '_tArgs']
-    def __init__(self, tok1, tok2, ctx, fnnode, argnodes):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, fnnode, argnodes):
+        super().__init__(tok1, tok2, st)
         self.fnnode = fnnode
         self.argnodes = argnodes
         self._tArgs = BTTuple(*[n.tOut for n in argnodes])
@@ -88,8 +88,8 @@ class apply(tcnode):
 
 class block(tcnode):
     __slots__ = ['argnames', '_tArgs', 'numargs', 'body', '_t_']
-    def __init__(self, tok1, tok2, ctx, argnames, tArgs, tRet, body):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, argnames, tArgs, tRet, body):
+        super().__init__(tok1, tok2, st)
         self.argnames = argnames
         if not isinstance(tArgs, BTTuple): raise ProgrammerError()
         self._tArgs = tArgs
@@ -97,13 +97,31 @@ class block(tcnode):
         self.numargs = len(argnames)
         self.body = body
         self._t_ = Missing
+    def replaceTypes(self, tArgs, tRet):
+        if not isinstance(tArgs, BTTuple): raise ProgrammerError()
+        self._tArgs = tArgs
+        self.tOut = tRet
+        self._t_ = Missing
+    @property
+    def _t(self):
+        if self._t_ is Missing:
+            self._t_ = BTFn(self._tArgs, self.tOut)
+        return self._t_
+    @property
+    def tRet(self):
+        return self.tOut
+    @property
+    def tArgs(self):
+        return self._tArgs
+    def __call__(self, *args, **kwargs):
+        raise NotYetImplemented()
 
 class bfunc(tcnode):
     # possibly could inherit from block - is a function anything more than a block with its own scope and style?
     # can also be called as a normal function from coppertop hence has _t, tRet, tArgs properties and __call__
     __slots__ = ['argnames', '_tArgs', 'numargs', 'body', '_t_', 'literalstyle']
-    def __init__(self, tok1, tok2, ctx, argnames, tArgs, tRet, body, literalstyle):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, argnames, tArgs, tRet, body, literalstyle):
+        super().__init__(tok1, tok2, st)
         self.argnames = argnames
         if not isinstance(tArgs, BTTuple): raise ProgrammerError()
         self._tArgs = tArgs
@@ -129,7 +147,7 @@ class bfunc(tcnode):
         argPPs = []
         for argName, tArg in zip(self.argnames, self.tArgs):
             argPPs += [f'{argName}:{tArg}']
-        report << TcReportLine(self, depth, f'bfunc {self.ctx.path} [{", ".join(argPPs)}] -> {self.tOut}')
+        report << TcReportLine(self, depth, f'bfunc {self.st.path} [{", ".join(argPPs)}] -> {self.tOut}')
         for phrase in self.body:
             phrase.PPTC(depth + 1, report)
     def __repr__(self):
@@ -153,15 +171,15 @@ class assumedfunc(bfunc): pass
 
 class coerce(tcnode):
     __slots__ = ['lhnode']
-    def __init__(self, tok1, tok2, ctx, lhnode, t):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, lhnode, t):
+        super().__init__(tok1, tok2, st)
         self.lhnode = lhnode
         self.tOut = t
 
 class partialcheck(tcnode):
     __slots__ = ['lhnode']
-    def __init__(self, tok1, ctx, lhnode, tOut):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, lhnode, tOut):
+        super().__init__(tok1, tok1, st)
         self.lhnode = lhnode
         self.tOut = tOut
     def PPTC(self, depth, report):
@@ -177,53 +195,53 @@ class partialcheck(tcnode):
 
 class bindval(tcnode):
     __slots__ = ['name', 'scope', 'lhnode']
-    def __init__(self, tok1, tok2, ctx, name, lhnode, scope):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, name, lhnode, scope):
+        super().__init__(tok1, tok2, st)
         self.name = name
         self.scope = scope
         self.lhnode = lhnode
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'bind {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'bind {self.st.path}.{self.name}')
         self.lhnode.PPTC(depth + 1, report)
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.name}.{self.id}'
+        return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
         return f'bind: {self.nodepath} = {self.lhnode.nodepath}'
 
 class getval(tcnode):
     __slots__ = ['name', 'scope']
-    def __init__(self, tok1, ctx, name, scope):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, name, scope):
+        super().__init__(tok1, tok1, st)
         self.name = name
         self.scope = scope
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'get {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'get {self.st.path}.{self.name}')
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.name}.{self.id}'
+        return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
         return f"get: {self.nodepath}"
 
 class getsubvalname(tcnode):
     __slots__ = ['lhnode', 'name']
-    def __init__(self, tok1, ctx, lhnode, name):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, lhnode, name):
+        super().__init__(tok1, tok1, st)
         self.lhnode = lhnode
         self.name = name
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'subgetname {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'subgetname {self.st.path}.{self.name}')
     def __repr__(self):
         return f"subgetname: {self.nodepath}"
 
 class getsubvalindex(tcnode):
     __slots__ = ['lhnode', 'index']
-    def __init__(self, tok1, ctx, lhnode, index):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, lhnode, index):
+        super().__init__(tok1, tok1, st)
         self.lhnode = lhnode
         self.index = index
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'getsubvalindex {self.ctx.path}.{self.index}')
+        report << TcReportLine(self, depth, f'getsubvalindex {self.st.path}.{self.index}')
     def __repr__(self):
         return f"getsubvalindex: {self.nodepath}"
 
@@ -234,47 +252,47 @@ class getsubvalindex(tcnode):
 
 class bindfn(tcnode):
     __slots__ = ['name', 'lhnode', 'scope']
-    def __init__(self, tok1, tok2, ctx, name, lhnode, scope):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, name, lhnode, scope):
+        super().__init__(tok1, tok2, st)
         self.name = name
         self.lhnode = lhnode
         self.scope = scope
-        if isinstance(lhnode, bfunc) and lhnode.ctx.name.startswith('anon'): lhnode.ctx.name = name
+        if isinstance(lhnode, bfunc) and lhnode.st.name.startswith('anon'): lhnode.st.name = name
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'bindfn {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'bindfn {self.st.path}.{self.name}')
         self.lhnode.PPTC(depth + 1, report)
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.name}.{self.id}'
+        return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
         return f'bindfn: {self.nodepath} = {self.lhnode.nodepath}'
 
 class getoverload(tcnode):
     __slots__ = ['name', 'scope', 'numargs']
-    def __init__(self, tok1, ctx, name, numargs, scope):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, name, numargs, scope):
+        super().__init__(tok1, tok1, st)
         self.name = name >> assertIs(str)
         self.numargs = numargs >> assertIs(int)
         self.scope = scope
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'getoverload {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'getoverload {self.st.path}.{self.name}')
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.name}_{self.numargs}.{self.id}'
+        return f'{self.st.path}.{self.name}_{self.numargs}.{self.id}'
     def __repr__(self):
         return f"getoverload: {self.nodepath}"
 
 class getfamily(tcnode):
     __slots__ = ['name', 'scope']
-    def __init__(self, tok1, ctx, name, scope):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, name, scope):
+        super().__init__(tok1, tok1, st)
         self.name = name >> assertIs(str)
         self.scope = scope
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'getfamily {self.ctx.path}.{self.name}')
+        report << TcReportLine(self, depth, f'getfamily {self.st.path}.{self.name}')
     @property
     def nodepath(self):
-        return f'{self.ctx.path}.{self.name}.{self.id}'
+        return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
         return f"getfamily: {self.nodepath} {self.name}"
 
@@ -286,8 +304,8 @@ class getfamily(tcnode):
 class lit(tcnode):
     # acts as a tv
     __slots__ = ['_v']
-    def __init__(self, tok1, ctx, t, v):
-        super().__init__(tok1, tok1, ctx)
+    def __init__(self, tok1, st, t, v):
+        super().__init__(tok1, tok1, st)
         self.tOut = t
         self._v = v
     def PPTC(self, depth, report):
@@ -300,8 +318,8 @@ class lit(tcnode):
 
 class littup(tcnode):
     __slots__ = ['_tv']
-    def __init__(self, tok1, tok2, ctx, tv):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, tv):
+        super().__init__(tok1, tok2, st)
         self._tv = tv
     def PPTC(self, depth, report):
         report << TcReportLine(self, depth, f'littup {self._tv}')
@@ -310,8 +328,8 @@ class littup(tcnode):
 
 class litstruct(tcnode):
     __slots__ = ['_tv']
-    def __init__(self, tok1, tok2, ctx, tv):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, tv):
+        super().__init__(tok1, tok2, st)
         self._tv = tv
     def PPTC(self, depth, report):
         report << TcReportLine(self, depth, f'litstruct {self._tv}')
@@ -320,8 +338,8 @@ class litstruct(tcnode):
 
 class litframe(tcnode):
     __slots__ = ['_tv']
-    def __init__(self, tok1, tok2, ctx, tv):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, tv):
+        super().__init__(tok1, tok2, st)
         self._tv = tv
     def PPTC(self, depth, report):
         report << TcReportLine(self, depth, f'litframe {self._tv}')
@@ -349,13 +367,13 @@ class ffunc(foreignfunc): pass          # fortran func
 # **********************************************************************************************************************
 
 class voidPhrase(tcnode):
-    def __init__(self, tok1, tok2, ctx):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st):
+        super().__init__(tok1, tok2, st)
         self.tOut = void
 
 class load(tcnode):
-    def __init__(self, tok1, tok2, ctx, paths):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, paths):
+        super().__init__(tok1, tok2, st)
         self.tOut = void
         self.paths = paths
     def PPTC(self, depth, report):
@@ -365,8 +383,8 @@ class load(tcnode):
 
 class fromimport(tcnode):
     __slots__ = ['path', 'names']
-    def __init__(self, tok1, tok2, ctx, path, names):
-        super().__init__(tok1, tok2, ctx)
+    def __init__(self, tok1, tok2, st, path, names):
+        super().__init__(tok1, tok2, st)
         self.tOut = void
         self.path = path
         self.names = names
