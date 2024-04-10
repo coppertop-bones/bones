@@ -22,7 +22,7 @@ from bones.lang.metatypes import BTUnion, BTFn, BTOverload
 from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 
 # SymTab
-#   holds all the type information for an environment / context
+#   holds all information for symbols
 #   holds the actual callable functions defined in it
 #   (values are stored by the storage manager)
 #   contexts can see other contexts - e.g. the global, module, context scope context and lexicalParent
@@ -169,8 +169,13 @@ class SymTab(object):
         '_lexicalParentSymTab', '_contextSymTab', '_moduleSymTab', '_globalSymTab',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
         '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newOverloadsByNumArgs',
-        'argCatcher', 'inferring'
+        'argCatcher', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
+        '_globalGets', '_localSets', '_contextSets', '_globalSets'
     ]
+
+    @property
+    def _pycharmVars(self):
+        return dict(name=self.name, kernel=self.kernel)
 
     def __init__(self, kernel, lexicalParentSt, contextSt, moduleSt, globalSt, name):
         # if a module then moduleSt and lexicalParentSt will be missing
@@ -195,6 +200,15 @@ class SymTab(object):
         self.argCatcher = Missing
         self.inferring = InferringHelper([], [])
 
+        self._localGets = set()
+        self._parentGets = set()
+        self._moduleGets = set()
+        self._contextGets = set()
+        self._globalGets = set()
+        self._localSets = set()
+        self._contextSets = set()
+        self._globalSets = set()
+
 
     def styleOfName(self, name):
         return self.kernel.styleForName(name)
@@ -208,6 +222,29 @@ class SymTab(object):
     def hasT(self, name):
         return name in self._newTMetaByName or name in self._tMetaByName
 
+    def noteGets(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            self._localGets.add(name)
+        elif scope == PARENT_SCOPE:
+            self._parentGets.add(name)
+        elif scope == MODULE_SCOPE:
+            self._moduleGets.add(name)
+        elif scope == CONTEXT_SCOPE:
+            self._contextGets.add(name)
+        elif scope == GLOBAL_SCOPE:
+            self._globalGets.add(name)
+        else:
+            raise ProgrammerError("Unknown scope '%s'" % scope)
+
+    def noteSets(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            self._localSets.add(name)
+        elif scope == CONTEXT_SCOPE:
+            self._contextSets.add(name)
+        elif scope == GLOBAL_SCOPE:
+            self._globalSets.add(name)
+        else:
+            raise ProgrammerError("Unknown scope '%s'" % scope)
 
     def vMetaForGet(self, name, scope):
         if scope == LOCAL_SCOPE:

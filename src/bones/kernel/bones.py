@@ -64,7 +64,7 @@ class BonesKernel(BaseKernel):
                 f'{line.l:>3}:  {line.src}' >> PP
             '' >> PP
 
-        group = parse_groups.parseStructure(tokens, self.scratch, self)
+        group = parse_groups.parseStructure(tokens, self.scratch)
 
         if context.showGroups:
             group.PPGroup >> PP
