@@ -1,4 +1,207 @@
-OPEN: move to bones?
+
+
+outine
+
+binding types - global scope?
+    defined once
+    aliased once - e.g. 
+
+```
+from dm.types import dm.matrix
+<:matrix: dm.matrix>
+```
+
+
+binding functions - module scope
+    may be extended (i.e. overloaded)
+
+binding values - local scope with additions
+    may be rebound
+    immutatbility
+    CoW
+    auto rebinding (like q)
+    returning one value is restrictive
+        restrict normal scope to just local variables (like q)
+        add non-local scope accessing
+
+
+# binding types
+
+
+# binding functions
+
+
+# binding values
+In bones we say a name is bound to a value. E.g. the name `a` can be bound to a list.
+
+We define a mutation as the alteration of something referred to by one name that affects the contents referred to by 
+another name. Since we prevent mutation by default binding implies copying in our conceptual model. E.g. if `a` is 
+bound to a list and `b` is bound to the thing in `a` we get:
+
+```
+a: (1,)
+b: a
+a append 2
+(a == (1, 2)) and (b == (1,))
+```
+
+(Under the hood we employ a copy-on-write mechanism to reduce the amount of copying).
+
+We detect if a change is made within the contents of the value a name is bound to, e.g.
+
+```
+a: (1,)
+b: a
+a[1]: 2
+(a == (2,)) and (b == (1,))
+```
+
+This choice of syntax, i.e. using the style of update common in languages that mutate, is borrowed from q and chosen to
+avoid the style, often seen in functional languages, where an update has to be written as an expression with one 
+output. E.g.
+
+```
+a: (1,)
+b: a
+a: a at: 1 put: 2
+(a == (2,)) and (b == (1,))
+```
+
+This doesn't look too bad but when we need to go deeper things get messy:
+
+```
+a: ((1,2), (3,4))
+b: a
+a: a at: 1 put: ((a at 1) at: 1 put: 2)
+(a == ((2,2), (3,4)) and (b == ((1,2), (3,4)))
+```
+
+
+We can see from the above alternatives to the syntax of returning one value from an expression that it is moot. We
+also other ways to return multiple values whilst keeping code clear, expressive, immutable and type checked.
+
+Consider, the following:
+
+```
+fred: {
+    a: 1
+    incA()
+    a == 2
+}
+incA: {a: a + 1}
+```
+
+In incA is `a` referred to before assignment?
+In fred and incA is `a` the same name?
+
+We cannot tell.
+
+
+In C we would have to declare a static variable `a`, instead in bones we restrict the default scope to local, i.e. 
+regular value names cannot refer to parent function nor module scope, and add out of local scope access, thus:
+
+- _..<name> for global access
+- _.<name> for contextual access
+- ..<name> for module access
+- .<name> for parent access
+
+### using global scope
+```
+fred: {
+    _..a: 1
+    incA()
+    _..a == 2
+}
+incA: {_..a: _..a + 1}
+```
+
+I.e. `_..a` is a global
+
+
+### using local and parent scope
+```
+fred: {
+    addOneToA: {.a + 1}
+    a: 1
+    a: addOneToA()
+    a == 2
+}
+```
+
+
+### using module and local scope
+```
+a: 1
+fred: {
+    addOneToA: {..a + 1}
+    a: addOneToA()
+    a == 2
+}
+```
+
+### using contextual scope
+```
+fred: {
+    _.a: 1
+    addOneToA: {_.a: _.a + 1}
+    addOneToA()
+    _.a == 2
+}
+```
+
+
+
+## Names
+
+For a function scope A we have five sorts of names and we track if those names refer to types, functions or values.
+
+
+functions inherit from their parent scope up to module
+
+local functions
+- style `fred`
+
+
+values do not inherit
+local, global and contextual values can be rebound from scope A, parent and module cannot be rebound from scope A
+
+local values
+- style `fred`
+
+parent values
+- style `.fred`
+
+module values
+- style `..fred`
+
+contextual values
+- style `_.fred`
+
+
+
+## multiple outputs
+
+For typing it is important to 
+
+
+side effects are over stated and conceptually unclear
+
+
+type names are assign once
+function names maybe extended (i.e. overloaded)
+value names may be rebound
+
+
+
+
+
+
+
+
+
+
+
+## TO SORT
 
 Material I've read from the Julia community present it as if it simply solves the expression problem.
 
