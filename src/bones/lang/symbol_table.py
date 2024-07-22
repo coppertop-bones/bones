@@ -72,7 +72,7 @@ def tOverload(): pass
 # Overload and Family are for managing collections of functions - we can optimise later, and these should be
 # integrated with the dispatchers in the piping
 
-class Family(object):
+class Family:
     __slots__ = ['name', 'overloads', '_t_']
 
     def __init__(self, name, overloads):
@@ -92,7 +92,7 @@ class Family(object):
         return self._t_
 
 
-class Overload(object):
+class Overload:
     # holds a collection of functions for a given name and number of args
 
     __slots__ = ['name', 'numargs', '_fnsTBI', '_t_', '_tUpperBounds_', '_fnBySig']
@@ -162,7 +162,7 @@ class Overload(object):
 
 
 
-class SymTab(object):
+class SymTab:
 
     __slots__ = [
         'name', 'kernel',
@@ -430,7 +430,7 @@ def blockSymTab(lexicalParentSt):
     return lexicalParentSt
 
 
-class _TBIQueue(object):
+class _TBIQueue:
     def __init__(self):
         self._fns = []   # need a queue as potentially the parser could add more than one before types are inferred
     def __lshift__(self, f):   # self << f

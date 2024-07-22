@@ -34,7 +34,7 @@ def stepBc(bc, ctx, stepState):
 
 
 
-class TCInterpreter(object):
+class TCInterpreter:
 
     # we use boxed values here as to do otherwise, e.g. only using type-tags for unions, would require a compilation
     # step to produce TC that optimally doesn't unnecessarily box

@@ -2225,7 +2225,7 @@ def toGlobalAssignRight(t):
     )
 
 
-class _Stack(object):
+class _Stack:
     def __init__(self):
         self._list = []
     def push(self, x):

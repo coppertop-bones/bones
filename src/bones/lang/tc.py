@@ -25,7 +25,7 @@ _nodeseed = itertools.count(start=1)
 # tree code node
 # **********************************************************************************************************************
 
-class tcnode(object):
+class tcnode:
     __slots__ = ['id', 'tok1', 'tok2', 'st', 'tOut']
     def __init__(self, tok1, tok2, st):
         self.id = next(_nodeseed)
@@ -408,7 +408,7 @@ class TcReport(list):
             self.append(e)
         return self
 
-class assertIs(object):
+class assertIs:
     def __init__(self, type):
         self.type = type
     def __rrshift__(self, lhs):     # lhs >> self

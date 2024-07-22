@@ -26,7 +26,7 @@ from bones.kernel.sym import SymManager
 
 
 
-class PythonStorageManager(object):
+class PythonStorageManager:
 
     def __init__(self):
         self.syms = SymManager()
@@ -122,7 +122,7 @@ class PythonStorageManager(object):
 
 
 
-class bframe(object):
+class bframe:
     def __init__(self, st, parent):
         self.st = st
         self.parent = parent

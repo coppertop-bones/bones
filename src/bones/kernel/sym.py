@@ -10,7 +10,7 @@
 
 from bones.core.sentinels import Missing
 
-class Sym(object):
+class Sym:
     __slots__ = ['_id', '_st']
     def __init__(self, id, st):
         self._id = id
@@ -37,7 +37,7 @@ class Sym(object):
         return self._id
 
 
-class SymManager(object):
+class SymManager:
 
     def __init__(self):
         self._symByString = {}
