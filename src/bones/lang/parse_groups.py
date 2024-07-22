@@ -339,7 +339,7 @@ def parseStructure(tokens, st, TRACE=False):
     for token in tokens[1:]:
         opener = openers.get(token.tag, Missing)
         isCloser = token.tag in closers
-        normal = (not opener and not isCloser) or (token.tag == R_ANGLE and not isinstance(currentG, TypeLangGroup))
+        isNormal = (not opener and not isCloser) or (token.tag == R_ANGLE and not isinstance(currentG, TypeLangGroup))
 
         # find a consumer for the token
         consumer = Missing
@@ -358,7 +358,7 @@ def parseStructure(tokens, st, TRACE=False):
                         if currentG not in traceGroups: traceGroups[next(traceGroupCount)] = currentG  # FOR DEBUG
             if consumer is Missing:
                 currentGChanged = False
-                if normal:      # OPEN: change TypeLang to group normally with a different parser
+                if isNormal:      # OPEN: change TypeLang to group normally with a different parser
                     consumer = currentG._consumeToken(token, token.indent)
                     if consumer:
                         if TRACE:
@@ -424,7 +424,7 @@ def parseStructure(tokens, st, TRACE=False):
 #   1) provide the behaviour of the current sink of tokens,
 #   2) abstract base class of all groups,
 
-class _Group(object):
+class _Group:
 
     __slots__ = [
         '_id',
@@ -545,6 +545,8 @@ class _Group(object):
 
         else:
             self._appendToken(tokenOrGroup, indent)
+
+        return self
 
 
     def _appendToken(self, tokenOrGroup, indent):
@@ -1486,9 +1488,9 @@ class FrameKeysGroup(_Phrases):
 
 def catchLAngleColon(token, currentG, stack):
     if not (token.tag == L_ANGLE_COLON): return Missing
-    tttg = TypeLangGroup(currentG, token, currentG.st)
-    currentG._consumeToken(tttg, token.indent)
-    return stack.push(tttg)
+    tlg = TypeLangGroup(currentG, token, currentG.st)
+    currentG._consumeToken(tlg, token.indent)
+    return stack.push(tlg)
 
 class TypeLangGroup(_Phrase):
     _isInteruptable = False
@@ -1574,7 +1576,7 @@ class _KeywordGroup(_Phrases):
     _isInteruptable = False
     __slots__ = ['_latestToken', '_firstTokenInPhrase', '_keywordTokens', '_assignLeftOrMissing']
 
-    def _consumeToken(self, tokenOrGroup, indent):
+    def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
         # answer self if we consume the token or Missing if we don't
         if self._tokens is Missing: raise ProgrammerError()
         if self._phraseState == SUGGESTED_BY_LINE_BREAK:
@@ -1803,7 +1805,7 @@ class LoadGroup(_Phrases):
     def PPDebug(self):
         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
 
-    def _consumeToken(self, tokenOrGroup, indent):
+    def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
         # answer self if we consume the token or Missing if we don't
         if self._tokens is Missing: raise ProgrammerError()
 
@@ -1945,7 +1947,7 @@ class FromImportGroup(_Phrases):
         else:
             return f'{{from x import y}} - {PPCloser(self._requiredCloser)}'
 
-    def _consumeToken(self, tokenOrGroup, indent):
+    def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
         # answer self if we consume the token or Missing if we don't
         if self._tokens is Missing: raise ProgrammerError()
         if self.path is Missing:
