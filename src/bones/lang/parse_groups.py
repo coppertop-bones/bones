@@ -957,38 +957,63 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
 
     # catch all right assignments and any unprocessed left assignments
     numNames = 0
-    for prior, each in pairwise(phrase):
+    prior = phrase[0]
+    for each in phrase[1:]:
         if isinstance(each, Token):
-            if each.tag == ASSIGN_LEFT:
-                varName = each.src
-                numNames += 1
-            elif each.tag == ASSIGN_RIGHT:
-                varName = each.src
-                numNames += 1
-                if isinstance(prior, FuncOrStructGroup):
-                    _checkStyle(prior, varName, st)
-                    st.defFnMeta(varName, TBI, LOCAL_SCOPE)
-                else:
-                    st.defVMeta(varName, TBI, LOCAL_SCOPE)
-            elif each.tag == CONTEXT_ASSIGN_RIGHT:
-                varName = each.src[5:]
-                numNames += 1
-                if isinstance(prior, FuncOrStructGroup):
-                    _checkStyle(prior, varName, st)
-                    st.defFnMeta(varName, TBI, CONTEXT_SCOPE)
-                else:
-                    st.defVMeta(varName, TBI, CONTEXT_SCOPE)
-            elif each.tag == GLOBAL_ASSIGN_RIGHT:
-                varName = each.src[5:]
-                numNames += 1
-                if isinstance(prior, FuncOrStructGroup):
-                    _checkStyle(prior, varName, st)
-                    st.defFnMeta(varName, TBI, GLOBAL_SCOPE)
-                else:
+            try:
+                if each.tag == ASSIGN_LEFT:
+                    varName = each.src
+                    numNames += 1
+                    if isinstance(group, FuncOrStructGroup):
+                        raise NotYetImplemented()
+                elif each.tag == ASSIGN_RIGHT:
+                    varName = each.src
+                    numNames += 1
+                    if isinstance(prior, FuncOrStructGroup):
+                        _checkStyle(prior, varName, st)
+                        st.defFnMeta(varName, TBI, LOCAL_SCOPE)
+                    elif isinstance(group, FrameGroup):
+                        print(f"{group}")
+                    elif isinstance(prior, type):
+                        print(f"{group}")
+                    elif isinstance(prior, Token) and prior.tag == NAME:
+                        name = prior.src
+                        if (m := st.fMetaForGet(name, LOCAL_SCOPE)):
+                            st.defFnMeta(varName, m.t, LOCAL_SCOPE)
+                        elif (m := st.vMetaForGet(name, LOCAL_SCOPE)):
+                            st.defVMeta(varName, m.t, LOCAL_SCOPE)
+                    else:
+                        st.defVMeta(varName, TBI, LOCAL_SCOPE)
+                elif each.tag == CONTEXT_ASSIGN_RIGHT:
+                    varName = each.src[5:]
+                    numNames += 1
+                    if isinstance(prior, FuncOrStructGroup):
+                        _checkStyle(prior, varName, st)
+                        st.defFnMeta(varName, TBI, CONTEXT_SCOPE)
+                    elif isinstance(group, FuncOrStructGroup):
+                        raise SyntaxError("Can't context assign with frame group")
+                    else:
+                        st.defVMeta(varName, TBI, CONTEXT_SCOPE)
+                elif each.tag == GLOBAL_ASSIGN_RIGHT:
+                    varName = each.src[5:]
+                    numNames += 1
+                    if isinstance(prior, FuncOrStructGroup):
+                        _checkStyle(prior, varName, st)
+                        st.defFnMeta(varName, TBI, GLOBAL_SCOPE)
+                    elif isinstance(group, FuncOrStructGroup):
+                        raise SyntaxError("Can't global assign with frame group")
+                    else:
+                        st.defVMeta(varName, TBI, GLOBAL_SCOPE)
                     st.defVMeta(varName, TBI, GLOBAL_SCOPE)
-                st.defVMeta(varName, TBI, GLOBAL_SCOPE)
+            except Exception as ex:
+                raise SyntaxError(f"l1: {repr(group)} l2: {group.l2}") from ex
         elif isinstance(each, TupParenOrDestructureGroup) and each._isDestructure:
             numNames += len(each.grid[0])
+        if isinstance(each, TypeLangGroup):
+            pass
+        else:
+            prior = each
+
     if exactlyOneNameInPhrase and numNames != 1:
         raise GroupError(
             f"Exactly one name must be provided, but {numNames} were found",
