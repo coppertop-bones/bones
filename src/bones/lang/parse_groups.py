@@ -991,7 +991,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, CONTEXT_SCOPE)
                     elif isinstance(group, FuncOrStructGroup):
-                        raise SyntaxError("Can't context assign with frame group")
+                        raise GroupError("Can't context assign with frame group")
                     else:
                         st.defVMeta(varName, TBI, CONTEXT_SCOPE)
                 elif each.tag == GLOBAL_ASSIGN_RIGHT:
@@ -1001,12 +1001,12 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, GLOBAL_SCOPE)
                     elif isinstance(group, FuncOrStructGroup):
-                        raise SyntaxError("Can't global assign with frame group")
+                        raise GroupError("Can't global assign with frame group")
                     else:
                         st.defVMeta(varName, TBI, GLOBAL_SCOPE)
                     st.defVMeta(varName, TBI, GLOBAL_SCOPE)
             except Exception as ex:
-                raise SyntaxError(f"l1: {repr(group)} l2: {group.l2}") from ex
+                raise GroupError(f"l1: {repr(group)} l2: {group.l2}") from ex
         elif isinstance(each, TupParenOrDestructureGroup) and each._isDestructure:
             numNames += len(each.grid[0])
         if isinstance(each, TypeLangGroup):
