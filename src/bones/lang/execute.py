@@ -15,7 +15,7 @@ from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
-from bones.lang.metatypes import BTTuple, cacheAndUpdate, fitsWithin
+from bones.lang.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin
 from bones.lang.structs import tv
 from bones.core.context import context
 
@@ -136,15 +136,16 @@ def getFnFromOverload(ov, sig):
     # however it should be much simpler
     for s, fn in ov._fnBySig.items():
         match = True
-        argDistances = []
-        tByT = {}
+        results = []
+        schemaVars = {}
+        distance = 0
         for tArg, tSig in zip(sig, fn._tArgs):
-            doesFit, tByTLocal, argDistance = cacheAndUpdate(fitsWithin(tArg, tSig, False), tByT, 0)
-            if not doesFit:
+            fits = fitsWithin(tArg, tSig)
+            if not fits:
                 match = False
                 break
-            tByT = tByTLocal
-            argDistances.append(argDistance)
+            schemaVars, distance = updateSchemaVarsWith(schemaVars, distance, fits)
+            results.append(fits)
         if match:
             return fn
     raise ProgrammerError()
