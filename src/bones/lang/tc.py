@@ -13,7 +13,7 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 import itertools, collections
 from bones.core.sentinels import Missing
 from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
-from bones.lang.metatypes import BType, BTFn, BTTuple
+from bones.ts.metatypes import BType, BTFn, BTTuple
 from bones.lang.types import void, TBI, null
 
 _nodeseed = itertools.count(start=1)

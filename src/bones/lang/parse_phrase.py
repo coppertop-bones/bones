@@ -37,12 +37,12 @@ from bones.lang.parse_groups import \
 from bones.lang.symbol_table import VMeta, FnMeta
 from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet, apply, bfunc, load, fromimport, \
     bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getsubvalname, getsubvalindex, block
-from bones.lang.metatypes import BTTuple, BTStruct
+from bones.ts.metatypes import BTTuple, BTStruct
 from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI
 from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
-from bones.lang.type_lang import TypeLangInterpreter
+from bones.ts.type_lang import TypeLangInterpreter
 
 
 def parseSnippet(snippetGroup, st, k):

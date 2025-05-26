@@ -19,7 +19,7 @@ from coppertop.pipe import _Dispatcher
 import dm.pp
 from dm.pp import PP
 from bones.lang.core import LOCAL_SCOPE
-from bones.lang.metatypes import BType
+from bones.ts.metatypes import BType
 from bones import jones
 
 

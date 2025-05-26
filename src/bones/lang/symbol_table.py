@@ -17,7 +17,7 @@ from bones.core.errors import ScopeError
 from bones.lang.core import MAX_NUM_ARGS
 from bones.lang.types import TBI
 from bones.lang.tc import bfunc
-from bones.lang.metatypes import BTUnion, BTFn, BTOverload
+from bones.ts.metatypes import BTUnion, BTFn, BTOverload
 from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 
 # SymTab

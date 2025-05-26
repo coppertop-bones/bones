@@ -14,7 +14,7 @@ from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
-from bones.lang.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin
+from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin
 from bones.core.context import context
 
 # implements stepping and pure execution interfaces
