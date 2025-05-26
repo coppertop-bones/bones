@@ -20,20 +20,3 @@ SCRATCH = 'scratch'
 RET_VAR_NAME = "__RET__"
 MAX_NUM_ARGS = 10
 
-class TLError(Exception): pass
-
-bmterr = 0
-bmtatm = 1      # snuggled in the highest nibble in the type's metadata, i.e. 0x1000_0000
-
-bmtint = 2
-bmtuni = 3
-
-bmttup = 4
-bmtstr = 5
-bmtrec = 6
-
-bmtseq = 7
-bmtmap = 8
-bmtfnc = 9
-
-bmtsvr = 10

@@ -44,7 +44,6 @@ from bones.lang.types import TBI
 from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
 from bones.lang.type_lang import TypeLangInterpreter
-from bones.lang.structs import tv
 
 
 def parseSnippet(snippetGroup, st, k):
@@ -491,7 +490,8 @@ def parsePhrase(tokens, st, k):
                         vs.append(node)
                         ts.append(node.tOut)
                     tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
-                    tvObj = tv(tStruct, dict(zip(names, vs)))
+                    # tvObj = tv(tStruct, dict(zip(names, vs)))
+                    raise NotYetImplemented('how do we get the struct type from the dm library?')
                     tokens >> 1
                     node = litstruct(t.tok1, t.tok2, st, tvObj)
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:

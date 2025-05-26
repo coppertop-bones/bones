@@ -16,7 +16,6 @@ from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
 from bones.lang.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin
-from bones.lang.structs import tv
 from bones.core.context import context
 
 # implements stepping and pure execution interfaces
@@ -86,7 +85,18 @@ class TCInterpreter:
                 return ret
             elif isinstance(fn, _Function):
                 ret = fn.fn(*(a._v for a in args))
-                return tv(fn.tRet, ret)
+                if hasattr(ret, '_t'):
+                    if ret._t:
+                        # check the actual return type fits the declared return type
+                        if fitsWithin(ret._t, fn.tRet):
+                            return ret
+                        else:
+                            raise BTypeError(f"Return type mismatch: expected {fn.tRet}, got {ret._t}")
+                    else:
+                        return ret | fn.tRet
+                else:
+                    # use the coercer rather than impose construction with tv
+                    return ret | fn.tRet
             else:
                 raise ProgrammerError(f"Unhandled  fn {{{type(fn)}}}")
 
