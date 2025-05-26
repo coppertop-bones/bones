@@ -1,0 +1,153 @@
+// *********************************************************************************************************************
+//
+//                            Copyright (c) 2022 David Briant. All rights reserved.
+//
+//    This is a derivation of Jay Damask's work from:
+//       https://gitlab.com/thucyd-dev/thucyd, and,
+//       https://gitlab.com/thucyd-dev/thucyd-eigen-working-examples
+//    Original Copyright 2019 Buell Lane Press, LLC (buell-lane-press.co)
+//    Licensed under Apache License, Version 2.0, January 2004, see http://www.apache.org/licenses/
+//
+// DESCRIPTION:
+//       Implementation of the theory of consistently oriented eigenvectors
+// *********************************************************************************************************************
+
+
+orientEigenvectors: {[V:matrix, E:matrix] <:{Vor:matrix, Eor:matrix, anglesMtx:matrix, signFlips:vec}>
+    // answers:
+    //
+    // Vor          eigenvector matrix cast into an oriented basis, see Note 1
+    // Eor          corresponding eigenvalue matrix conformant to `Vor`, see Note 2
+    // anglesMtx    upper-trianglar matrix of angles embedded in `Vor` with respect to the constituent basis in
+    //              which (sorted) `V` is materialized
+    // signFlips    Vector of signs that was applied to (sorted) `V` such that `Vor` is oriented
+    //
+    //
+    // Finds signFlips such that `Vor = V . diag(signFlips)`, where `Vor` is an oriented basis.
+    //
+    // where:
+    //
+    // V            eigenvector matrix with columns vectors
+    // E            corresponding eigenvalue matrix
+    //
+    //
+    // notes:
+    //
+    // 1. The columns of `Vor` are ordered such that their associated eigenvalues are sorted in descending order of
+    //    absolute value. That the absolute value is taken on the eigenvalues is to treat the general case of an input
+    //    Hermitian matrix. For data analysis, SVD will generally yield a positive (semi)definite eigensystem, so
+    //    negative eigenvalues are not attained.
+    //
+    // 2. The diagonal entries of `Eor` are ordered in descending absolute value of the input eigenvalue matrix `E`.
+}
+
+
+reduceDimensionByOne: {[cursor:index, Vwork:matrix] <:{Vwork:matrix, anglesCol:vec}>
+    // answers:
+    //
+    // Vwork       updated `Vwork` matrix
+    // anglesCol   Givens rotation angles applied to input `Vwork`
+    //
+    // Transforms `Vwork` such that a 1 appears on the `cursor` pivot and the lower-right sub-space is,
+    // consequently, rotated
+    //
+    // where:
+    //
+    // cursor      index of the lower right subspace embedded in `R`
+    // Vwork       current workspace matrix such that the upper-left pivots outside of the current subspace are 1 while
+    //             the lower-right subspace itself remains (almost surely) unaligned to the constituent basis
+    //
+    //
+    // The goal is to apply rotation matrix R.T such that the current sub-space dimension of `Vwork` is reduced by one.
+    // In block form,
+    //
+    //         -            -     -            -
+    //         | 1          |     | 1          |
+    //  R.T x  |    *  *  * |  =  |    1       |
+    //         |    *  *  * |     |       *  * |
+    //         |    *  *  * |     |       *  * |
+    //         -            -     -            -
+}
+
+
+solveRotationAnglesInSubDim: {[cursor:index, Vcol:vec] <:vec>
+    // answers `anglesCol`, a vector of angles
+    //
+    // Solves for embedded angles necessary to rotate a unit vector pointing along the `cursor` axis, within `N`,
+    // into the input `Vcol` vector.
+    //
+    // Recursive solution strategy to calculate rotation angles required to rotate the principal axis of a sub
+    // dimension onto an axis of its corresponding constituent basis.
+    //
+    // where:
+    //
+    // cursor   index of the lower right subspace embedded in `R`
+    // Vcol     (column) vector in `N` whose elements at and above `cursor` will be matched by the rotation sequence
+    //
+    //
+    // notes:
+    //
+    // The recursion in this function solves for angles theta_2, theta_3, ... such that:
+    //
+    //     -          -     -    -
+    //     | c2 c3 c4 |     | v1 |
+    //     | s2 c3 c4 |  =  | v2 |,  {s|c}k = {sin|cos}(theta_k)
+    //     |   s3 c4  |     | v3 |
+    //     |    s4    |     | v4 |
+    //     -          -     -    -
+    //
+    // In particular, the arcsin recursion equations are implemented because they have better edge-case properties than
+    // the arctan recursion.
+}
+
+
+constructSubspaceRotationMatrix: {[cursor:index, anglesCol:vec] <:matrix>
+    // answers a rotation matrix that spans the subspace indicated by `cursor` by cascading a sequence of Givens
+    // rotations, thus:
+    //
+    // for `N` = 4 and `cursor` = 2
+    //
+    // -            --            -     -            -
+    // | 1          || 1          |     | 1          |
+    // |   c  -s    ||   c     -s |  =  |    *  *  * |
+    // |   s   c    ||      1     |     |    *  *  * |
+    // |          1 ||   s      c |     |    *  *  * |
+    // -            --            -     -            -
+    //       ^              ^
+    // `anglesCol`.3  `anglesCol`.4            R
+    //
+    // where:
+    //
+    // cursor      index of the lower right subspace embedded in `R`
+    // anglesCol   rotation angles in current subspace. This is a view on `anglesMtx` from the outer scope
+}
+
+
+Givens: {[N:count, cursor:index, subCursor:index, theta:num] <:matrix>
+    // answers a Givens rotation matrix, such that for example for `N` = 4, `cursor` = 2 and `subCursor` = 4:
+    //
+    //         -          -
+    //         | 1        |
+    //     R = |   c   -s |  <- cursor
+    //         |     1    |
+    //         |   s    c |  <- subCursor
+    //         -          -
+    //             ^    ^
+    //             |    |
+    //          cursor  |
+    //              subCursor
+    //
+    // where:
+    //
+    // N           dimension of the full space
+    // cursor      index of the start of the lower right subspace embedded in `R`
+    // subCursor   index of the pivot position of the lower cos(.) entry
+    // theta       rotation angle
+    //
+    // see https://en.wikipedia.org/wiki/Givens_rotation
+}
+
+
+sortEigenvectors: {[V:matrix, S:vec] <:{V:matrix, S:vec}>
+    // Given `V` a matrix of eigen col vectors and `S` a vector of eigenvalues answer the same but in `S` descending order
+}
