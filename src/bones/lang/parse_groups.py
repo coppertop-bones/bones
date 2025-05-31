@@ -233,7 +233,7 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 from coppertop.pipe import coppertop
-from dm.pp import PP, EE
+from coppertop.dm.pp import PP, EE
 
 from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented
 from bones.core.sentinels import Missing
