@@ -16,8 +16,8 @@ from bones.lang import parse_phrase, parse_groups, lex
 from bones.lang.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Dispatcher
-import dm.pp
-from dm.pp import PP
+import coppertop.dm.pp
+from coppertop.dm.pp import PP
 from bones.lang.core import LOCAL_SCOPE
 from bones.ts.metatypes import BType
 from bones import jones
