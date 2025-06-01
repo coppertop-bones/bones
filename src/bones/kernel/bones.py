@@ -192,7 +192,9 @@ class BonesKernel(BaseKernel):
                         currentStyle = self.styleByName.setdefault(name, style)
                         if style != currentStyle: raise ImportError("oh dear")
                         ctx.bindFn(name, importee.d)
+
             elif hasattr(importee, "_t"):
+
                 if ctx.hasV(name):
                     # for the moment only import new names handle overloading later
                     pass
@@ -201,6 +203,34 @@ class BonesKernel(BaseKernel):
             else:
                 raise ProgrammerError()
 
+    def importedValues(self, path, names):
+        if (mod := self.modByPath.get(path, Missing)) is Missing:
+            raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
+        nvs = {}
+        for name in names:
+            importee = Missing
+            if hasattr(mod, name):
+                importee = getattr(mod, name)
+            else:
+                # TODO keep functions by fnname by modname.
+                for thingName in dir(mod):
+                    thing = getattr(mod, thingName)
+                    if isinstance(thing, jones._fn):
+                        if thing.name == name:
+                            importee = thing
+                            break
+                if importee is Missing:
+                    raise ImportError(f"Can't find '{name}' in {path}", ErrSite("Can't find name"))
+
+            if isinstance(importee, (BType, jones._fn)):
+                pass
+
+            elif hasattr(importee, "_t"):
+                nvs[name] = importee
+
+            else:
+                raise ProgrammerError()
+        return nvs
 
 
 handlersByErrSiteId.update({

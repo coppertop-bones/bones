@@ -7,9 +7,9 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-from coppertop.pipe import _Function
+from coppertop.pipe import _Function, _typeOf
 from bones.lang.tc import load, fromimport, bindval, apply, getval, bfunc, lit, bindfn, getfamily, getoverload, litstruct, littup
-from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME
+from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
 from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
@@ -70,19 +70,21 @@ class TCInterpreter:
 
                 else:
                     raise ProgrammerError()
+            elif isinstance(ov, bfunc):
+                fn = ov
             else:
                 raise ProgrammerError()
             if isinstance(fn, bfunc):
                 frame = sm.pushFrame(fn.st)
                 for name, arg in zip(fn.argnames, args):
-                    sm.bindval(frame.st, LOCAL_SCOPE, name, arg)
+                    sm.bind(frame.st, LOCAL_SCOPE, name, arg)
                 for n2 in fn.body:
                     val = self.ex(n2)
                 if (ret := sm.getReturn(frame.st, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
                 sm.popFrame()
                 return ret
             elif isinstance(fn, _Function):
-                ret = fn.fn(*(a._v for a in args))
+                ret = fn.pyfn(*(getattr(a, '_v', a) for a in args))
                 if hasattr(ret, '_t'):
                     if ret._t:
                         # check the actual return type fits the declared return type
@@ -94,14 +96,18 @@ class TCInterpreter:
                         return ret | fn.tRet
                 else:
                     # use the coercer rather than impose construction with tv
-                    return ret | fn.tRet
+                    if fitsWithin(_typeOf(ret), fn.tRet):
+                        return ret
+                    else:
+                        return ret | fn.tRet
+
             else:
                 raise ProgrammerError(f"Unhandled  fn {{{type(fn)}}}")
 
         elif isinstance(n, bindval):
             # context.tt << f'bindval {n}'
             val = self.ex(n.lhnode)
-            self.sm.bindval(n.st, n.scope, n.name, val)
+            self.sm.bind(n.st, n.scope, n.name, val)
             return val
 
         elif isinstance(n, getval):
@@ -128,11 +134,19 @@ class TCInterpreter:
 
         elif isinstance(n, bindfn):
             # unlikely but we could potentially right bind a fn and call it immediately
-            return n.fnnode
+            # val = self.ex(n.lhnode)
+            val = n.lhnode
+            self.sm.bind(n.st, n.scope, n.name, val)
+            return val
 
-        elif isinstance(n, (load, fromimport)):
-            # these are handled during parsing
+        elif isinstance(n, load):
+            # only needed to be done at parse time
             pass
+
+        elif isinstance(n, fromimport):
+            # symbols, type holders and functions are gotten at parse time, but values must be loaded at execution time
+            for name, v in self.k.importedValues(n.path, n.names).items():
+                self.sm.bind(n.st, MODULE_SCOPE, name, v)
 
         else:
             raise NotImplementedError(f"Unhandled node {{{n}}}")
