@@ -366,11 +366,10 @@ class SymTab:
         pass
 
     def bindFn(self, name, fn):
-        if name not in self._fnMetaByName and name not in self._newFnMetaByName: raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, bfunc)) and fn != TBI: raise ProgrammerError()
-        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
-        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         if not self.hasF(name): raise ProgrammerError()
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, bfunc)) and fn != TBI: raise ProgrammerError()
+        if self._globalSymTab is Missing: raise ScopeError("Missing global scope")
+        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         numargs = fn.numargs
         overloadsByName = self._newOverloadsByNumArgs[numargs]
         if (overload := overloadsByName.get(name, Missing)) is Missing: overload = overloadsByName[name] = Overload(name, numargs)
