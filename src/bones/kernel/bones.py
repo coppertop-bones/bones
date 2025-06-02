@@ -12,7 +12,7 @@ from bones.core.sentinels import Missing, Void
 from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError
 from bones.kernel.base import BaseKernel
 from bones.lang import parse_phrase, parse_groups, lex
-# from bones.lang.infer import Simplifier, visit, InferenceLogger
+from bones.lang.infer import Simplifier, visit, InferenceLogger
 from bones.lang.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Dispatcher
@@ -28,15 +28,22 @@ pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 
 class BonesKernel(BaseKernel):
 
-    __slots__ = ['srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch']
+    __slots__ = [
+        'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch', 'litdateCons', 'littupCons',
+        'litstructCons', 'litframeCons'
+    ]
 
-    def __init__(self, sm):
+    def __init__(self, sm, *, litdateCons, littupCons, litstructCons, litframeCons):
         super().__init__(sm)
         self.srcById = {}
         self.linesById = {}
         self.nextSrcId = itertools.count(start=1)
         self.infercache = set()
         self.sm = sm
+        self.litdateCons = litdateCons
+        self.littupCons = littupCons
+        self.litstructCons = litstructCons
+        self.litframeCons = litframeCons
         self.tcrunner = Missing
         self.scratch = Missing
 

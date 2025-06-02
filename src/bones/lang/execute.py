@@ -8,7 +8,8 @@
 # **********************************************************************************************************************
 
 from coppertop.pipe import _Function, _typeOf
-from bones.lang.tc import load, fromimport, bindval, apply, getval, bfunc, lit, bindfn, getfamily, getoverload, litstruct, littup
+from bones.lang.tc import load, fromimport, bindval, apply, getval, bfunc, lit, bindfn, getfamily, getoverload, \
+    litstruct, littup, getelementbyname
 from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
 from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
@@ -148,8 +149,12 @@ class TCInterpreter:
             for name, v in self.k.importedValues(n.path, n.names).items():
                 self.sm.bind(n.st, MODULE_SCOPE, name, v)
 
+        elif isinstance(n, getelementbyname):
+            val = self.ex(n.lhnode)._tv
+            return val[self.sm.syms.Sym(n.name)] if hasattr(val, '__getitem__') else getattr(val, n.name)
+
         else:
-            raise NotImplementedError(f"Unhandled node {{{n}}}")
+            raise NotYetImplemented(f"Unhandled node {{{n}}}")
 
 
 
