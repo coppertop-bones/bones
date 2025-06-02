@@ -36,7 +36,7 @@ from bones.lang.parse_groups import \
     FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
 from bones.lang.symbol_table import VMeta, FnMeta
 from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet, apply, bfunc, load, fromimport, \
-    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getsubvalname, getsubvalindex, block
+    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getelementbyname, getelementbyindex, block
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI
@@ -377,7 +377,7 @@ def parsePhrase(tokens, st, k):
                     tokens >> 1
                     if otherNames:
                         for name in otherNames:
-                            node = getsubvalname(t, st, node, name)
+                            node = getelementbyname(t, st, node, name)
 
             elif tag == PARENT_VALUE_NAME:
                 name = t.src
@@ -489,10 +489,9 @@ def parsePhrase(tokens, st, k):
                         vs.append(node)
                         ts.append(node.tOut)
                     tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
-                    # tvObj = tv(tStruct, dict(zip(names, vs)))
-                    raise NotYetImplemented('how do we get the struct type from the dm library?')
+                    tvstruct = k.litstructCons(tStruct, dict(zip(names, vs)))
                     tokens >> 1
-                    node = litstruct(t.tok1, t.tok2, st, tvObj)
+                    node = litstruct(t.tok1, t.tok2, st, tvstruct)
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:
                     raise NotYetImplemented()
                 else:

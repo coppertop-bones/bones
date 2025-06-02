@@ -215,34 +215,34 @@ class getval(tcnode):
         self.name = name
         self.scope = scope
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'get {self.st.path}.{self.name}')
+        report << TcReportLine(self, depth, f'getval {self.st.path}.{self.name}')
     @property
     def nodepath(self):
         return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
         return f"get: {self.nodepath}"
 
-class getsubvalname(tcnode):
+class getelementbyname(tcnode):
     __slots__ = ['lhnode', 'name']
     def __init__(self, tok1, st, lhnode, name):
         super().__init__(tok1, tok1, st)
         self.lhnode = lhnode
         self.name = name
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'subgetname {self.st.path}.{self.name}')
+        report << TcReportLine(self, depth, f'getelementbyname {self.st.path}.{self.name}')
     def __repr__(self):
-        return f"subgetname: {self.nodepath}"
+        return f"getelementbyname: {self.nodepath}"
 
-class getsubvalindex(tcnode):
+class getelementbyindex(tcnode):
     __slots__ = ['lhnode', 'index']
     def __init__(self, tok1, st, lhnode, index):
         super().__init__(tok1, tok1, st)
         self.lhnode = lhnode
         self.index = index
     def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'getsubvalindex {self.st.path}.{self.index}')
+        report << TcReportLine(self, depth, f'getelementbyindex {self.st.path}.{self.index}')
     def __repr__(self):
-        return f"getsubvalindex: {self.nodepath}"
+        return f"getelementbyindex: {self.nodepath}"
 
 
 # **********************************************************************************************************************

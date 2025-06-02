@@ -975,12 +975,14 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         print(f"{group}")
                     elif isinstance(prior, type):
                         print(f"{group}")
-                    elif isinstance(prior, Token) and prior.tag == NAME:
-                        name = prior.src
-                        if (m := st.fMetaForGet(name, LOCAL_SCOPE)):
-                            st.defFnMeta(varName, m.t, LOCAL_SCOPE)
-                        elif (m := st.vMetaForGet(name, LOCAL_SCOPE)):
-                            st.defVMeta(varName, m.t, LOCAL_SCOPE)
+
+                    # elif isinstance(prior, Token) and prior.tag == NAME:
+                    #     name = prior.src
+                    #     if (m := st.fMetaForGet(name, LOCAL_SCOPE)):
+                    #         st.defFnMeta(varName, m.t, LOCAL_SCOPE)
+                    #         st.defFnMeta(varName, m.t, LOCAL_SCOPE)
+                    #     elif (m := st.vMetaForGet(name, LOCAL_SCOPE)):
+                    #         st.defVMeta(varName, m.t, LOCAL_SCOPE)
                     else:
                         st.defVMeta(varName, TBI, LOCAL_SCOPE)
                 elif each.tag == CONTEXT_ASSIGN_RIGHT:
