@@ -35,8 +35,8 @@ from bones.lang.parse_groups import \
     TypeLangGroup, \
     FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
 from bones.lang.symbol_table import VMeta, FnMeta
-from bones.lang.tc import lit, voidPhrase, bindval, getval, getoverload, snippet, apply, bfunc, load, fromimport, \
-    bindfn, getfamily, assumedfunc, litstruct, littup, litframe, getelementbyname, getelementbyindex, block
+from bones.lang.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
+    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI
@@ -48,7 +48,7 @@ from bones.ts.type_lang import TypeLangInterpreter
 def parseSnippet(snippetGroup, st, k):
     # must not mutate sm
     tcs = [parsePhrase(phrase, st, k) for phrase in snippetGroup.phrases]
-    return snippet(snippetGroup.tok1, snippetGroup.tok2, st, tcs)
+    return tcsnippet(snippetGroup.tok1, snippetGroup.tok2, st, tcs)
 
 
 def parseTupParenOrDestructureGroup(group, st, k):
@@ -118,7 +118,7 @@ def snippetOrTc(phrases):
 
 
 def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
-    style = fOrName.literalstyle if isinstance(fOrName, bfunc) else st.styleOfName(fOrName)
+    style = fOrName.literalstyle if isinstance(fOrName, tcfunc) else st.styleOfName(fOrName)
 
     if node is Missing:
         # possibilities
@@ -137,8 +137,8 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
                     if ctxWithFn is Missing:
                         f = fOrName
                     else:
-                        f = getoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(tokens[0].tok1, next.tok2, st, f, rhs), 2
+                        f = tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)      # OPEN handle partials
+                    return tcapply(tokens[0].tok1, next.tok2, st, f, rhs), 2
                 elif tupleType == TUPLE_0_EMPTY:
                     # fn(a,b,c)
                     if isinstance(tup, _SemiColonSepCommaSepDotSep):
@@ -155,13 +155,13 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
                     if ctxWithFn is Missing:
                         f = fOrName
                     else:
-                        f = getoverload(tokens[0].tok1, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
-                    return apply(tokens[0].tok1, next.tok2, st, f, rhs), 2
+                        f = tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, numargs, LOCAL_SCOPE)      # OPEN handle partials
+                    return tcapply(tokens[0].tok1, next.tok2, st, f, rhs), 2
                 else:
                     raise ProgrammerError()
             elif isinstance(next, Token):
                 if next.tag == ASSIGN_RIGHT:
-                    # OPEN: handle {a+1} :f (1)   which should answer apply(bindfn('f', deffn(...)),1) but may impact elsewhere
+                    # OPEN: handle {a+1} :f (1)   which should answer tcapply(tcbindfn('f', deffn(...)),1) but may impact elsewhere
                     # handled in main parse loop so just put the function in the node and consume 1 token
                     if ctxWithFn is Missing:
                         f = fOrName
@@ -169,7 +169,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
                         raise NotYetImplemented("need to copy every overload into the local symtab")
                     return f, 1
                 else:
-                    f = getfamily(tokens[0].tok1, ctxWithFn, fOrName, LOCAL_SCOPE)
+                    f = tcgetfamily(tokens[0].tok1, ctxWithFn, fOrName, LOCAL_SCOPE)
                     return f, 1             # fn is probably being called as an argument
             else:
                 raise NotYetImplemented()
@@ -187,19 +187,19 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
             elif tupleType == TUPLE_1_EMPTY:
                 # noun unary(,args)
                 rhs = postUnaryTok.tok2
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(tup), LOCAL_SCOPE)
+                f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, len(tup), LOCAL_SCOPE)
                 for i in range(len(tup)):
-                    if isinstance(tup[i], voidPhrase):
+                    if isinstance(tup[i], tcvoidphrase):
                         tup[i] = node
                         break
-                return apply(node.tok1, rhs, st, f, tup), 2
+                return tcapply(node.tok1, rhs, st, f, tup), 2
             else:
                 raise SentenceError("error needs describing properly")
         else:
             # noun unary
             rhs = tokens[0].tok2
-            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)
-        return apply(node.tok1, tokens[0], st, f, [node]), 1
+            f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 1, LOCAL_SCOPE)
+        return tcapply(node.tok1, tokens[0], st, f, [node]), 1
 
 
     elif style is binary:
@@ -212,20 +212,20 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
                 # noun binary (arg2)
                 arg2 = tup[0]
                 rhs = postBinaryTok.tok2
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)
+                f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)
             else:
                 # e.g. noun binary (,,args) arg2`
                 parenArgs = postBinaryTok.grid[0]
                 rhs = postBinaryTok.tok2
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)
+                f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)
                 # OPEN: handle arg2(...)
                 raise NotYetImplemented("need to get the next one pipeable arg and merge with paren args")
         else:
             arg2 = parseSingle(postBinaryTok, st, k)
             rhs = arg2.tok2
-            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)      # OPEN handle partials
+            f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 2, LOCAL_SCOPE)      # OPEN handle partials
 
-        return apply(node.tok1, rhs, st, f, [node, arg2]), 2
+        return tcapply(node.tok1, rhs, st, f, [node, arg2]), 2
 
 
     elif style is ternary:
@@ -241,16 +241,16 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
             if tupleType == TUPLE_OR_PAREN:
                 # e.g. of form `noun ternary (arg2) arg3`
                 arg2 = tup[0]
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
+                f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
                 i += 1
             else:
                 # e.g. of form `noun ternary (,,...) arg2 arg3`
                 parenArgs = tok.grid[0]
-                f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)  # OPEN handle partials
+                f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, len(parenArgs), LOCAL_SCOPE)  # OPEN handle partials
                 raise NotYetImplemented("need to get the postTernaryTok two pipeable args and merge with paren args")
         else:
             arg2 = parseSingle(tok, st, k)  # OPEN: handle post arg2 to parens
-            f = fOrName if ctxWithFn is Missing else getoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
+            f = fOrName if ctxWithFn is Missing else tcgetoverload(tokens[0].tok1, ctxWithFn, fOrName, 3, LOCAL_SCOPE)  # OPEN handle partials
             i += 1
 
         # handle token after arg2
@@ -270,7 +270,7 @@ def buildFnApplication(node, ctxWithFn, fOrName, st, tokens, k):
             arg3 = parseSingle(tok, st, k)  # OPEN: handle post arg3 to parens
             i += 1
 
-        return apply(node.tok1, arg3.tok2, st, f, [node, arg2, arg3]), 3
+        return tcapply(node.tok1, arg3.tok2, st, f, [node, arg2, arg3]), 3
 
 
     else:
@@ -283,17 +283,18 @@ def parseSingle(t, st, k):
         if tag == NAME:
             name = t.src
             meta = st.fOrVMetaForGet(name, LOCAL_SCOPE)
-            if meta is Missing: raise SentenceError(f"unknown name - {name}")
+            if meta is Missing: raise SentenceError(f'unknown name - {name}')
             if isinstance(meta, VMeta):
-                return getval(t.tok1, meta.st, name, meta.t, LOCAL_SCOPE)
+                accessors = []
+                return tcgetval(t.tok1, meta.st, LOCAL_SCOPE, name, accessors).setTOut(meta.t)
             else:
-                return getfamily(t.tok1, meta.st, name, LOCAL_SCOPE)
+                return tcgetfamily(t.tok1, meta.st, name, LOCAL_SCOPE)
         elif tag == INTEGER:
-            return lit(t.tok1, st, *k.sm.parseLitInt(t.src))
+            return tclit(t.tok1, st, *k.sm.parseLitInt(t.src))
         elif tag == DECIMAL:
-            return lit(t.tok1, st, *k.sm.parseLitDec(t.src))
+            return tclit(t.tok1, st, *k.sm.parseLitDec(t.src))
         elif tag == TEXT:
-            return lit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
+            return tclit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
         else:
             missingTag = prettyNameByTag[tag]
             raise NotYetImplemented()
@@ -319,7 +320,7 @@ def parseParameters(params, fnctx, k):
 def parsePhrase(tokens, st, k):
     # must not mutate sm
 
-    if not tokens: return voidPhrase(0, 0, st)
+    if not tokens: return tcvoidphrase(0, 0, st)
 
     node = Missing
 
@@ -341,17 +342,17 @@ def parsePhrase(tokens, st, k):
                 name = t.src
                 # for the moment check every name for dots - could (should?) be done by lexer
                 names = name.split('.')
-                name, otherNames = (names[0], names[1:]) if len(names) > 1 else (name, [])
+                name, accessors = (names[0], names[1:]) if len(names) > 1 else (name, [])
                 meta = st.fOrVMetaForGet(name, LOCAL_SCOPE)
                 if meta is Missing:
                     raise SentenceError(f"unknown name - {name}", ErrSite("unknown name"))
                 if isinstance(meta, FnMeta):
-                    if otherNames:
+                    if accessors:
                         raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
                     node, numConsumed = buildFnApplication(node, meta.st, name, st, tokens, k)
                     tokens >> numConsumed
                 elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGroup) and name in st.argCatcher.inferredArgnames:
-                    if otherNames:
+                    if accessors:
                         raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
                     # design decision - decide that it is the latter
@@ -368,16 +369,12 @@ def parsePhrase(tokens, st, k):
                     # TODO add a test to check that `{1 + f(x)}` is handled correctly (i.e. the binary + doesn't appear in node here)
                     node, numConsumed = buildFnApplication(node, meta.st, name, st, tokens, k)
                     numArgs = node.fnnode.numargs
-                    f = assumedfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,) * numArgs), TBI, Missing, nullary)
+                    f = tcassumedfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,) * numArgs), TBI, Missing, nullary)
                     overload = st.bindFn(name, f)    # add the function to the local symtab - the TBIs will be converted to type variables later
                     tokens >> numConsumed
                 else:
-                    node = getval(t, meta.st, name, LOCAL_SCOPE)
-                    node.tOut = meta.t
+                    node = tcgetval(t, meta.st, LOCAL_SCOPE, name, accessors).setTOut(meta.t)
                     tokens >> 1
-                    if otherNames:
-                        for name in otherNames:
-                            node = getelementbyname(t, st, node, name)
 
             elif tag == PARENT_VALUE_NAME:
                 name = t.src
@@ -400,7 +397,7 @@ def parsePhrase(tokens, st, k):
             elif tag == ASSIGN_RIGHT:
                 name = t.src
                 # take care with st here - probably needs careful thinking through
-                if isinstance(node, bfunc):
+                if isinstance(node, tcfunc):
                     # meta = st.fMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
                     #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
@@ -410,7 +407,7 @@ def parsePhrase(tokens, st, k):
                     currentStyle = k.styleByName.setdefault(name, node.literalstyle)
                     if node.literalstyle != currentStyle:
                         raise NotYetImplemented("Note that style has been changed")
-                    node = bindfn(min(t.tok1, node.tok1), max(t.tok2, node.tok2), st, name, node, LOCAL_SCOPE)
+                    node = tcbindfn(min(t.tok1, node.tok1), max(t.tok2, node.tok2), st, name, node, LOCAL_SCOPE)
                     tokens >> 1
                 else:
                     # meta = st.vMetaForBind(name, LOCAL_SCOPE)
@@ -419,7 +416,8 @@ def parsePhrase(tokens, st, k):
                     st.defVMeta(name, TBI, LOCAL_SCOPE)
                     #HACK
                     node = node[0] if isinstance(node, list) else node
-                    node = bindval(t.tok1, t.tok2, st, name, node, LOCAL_SCOPE)
+                    accessors = []
+                    node = tcbindval(t.tok1, t.tok2, st, node, LOCAL_SCOPE, name, accessors)
                     tokens >> 1
 
             elif tag == CONTEXT_ASSIGN_RIGHT:
@@ -434,31 +432,32 @@ def parsePhrase(tokens, st, k):
                     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
                 else:
                     st.defVMeta(name, TBI, GLOBAL_SCOPE)
-                    node = bindval(st, name, node, GLOBAL_SCOPE)
+                    accessors = []
+                    node = tcbindval(t.tok1, t.tok2, st, node, GLOBAL_SCOPE, name, accessors)
                     tokens >> 1
 
             elif tag == INTEGER:
-                node = lit(t.tok1, st, *k.sm.parseLitInt(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitInt(t.src))
                 tokens >> 1
 
             elif tag == DECIMAL:
-                node = lit(t.tok1, st, *k.sm.parseLitDec(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitDec(t.src))
                 tokens >> 1
 
             elif tag == TEXT:
-                node = lit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
                 tokens >> 1
 
             elif tag == SYM:
-                node = lit(t.tok1, st, *k.sm.parseLitSym(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitSym(t.src))
                 tokens >> 1
 
             elif tag == SYMS:
-                node = lit(t.tok1, st, *k.sm.parseLitSyms(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitSyms(t.src))
                 tokens >> 1
 
             elif tag == DATE:
-                node = lit(t.tok1, st, *k.sm.parseLitDate(t.src))
+                node = tclit(t.tok1, st, *k.sm.parseLitDate(t.src))
                 tokens >> 1
 
             elif tag in (
@@ -472,7 +471,7 @@ def parsePhrase(tokens, st, k):
                 raise ProgrammerError("Looks like the grouping hasn't worked proprerly", ErrSite("Encountered ASSIGN_LEFT"))
 
             elif tag == NULL:
-                return voidPhrase(t.tok1, t.tok2, st)
+                return tcvoidphrase(t.tok1, t.tok2, st)
 
             else:
                 raise ProgrammerError()
@@ -481,7 +480,7 @@ def parsePhrase(tokens, st, k):
 
             if isinstance(t, FuncOrStructGroup):
                 if t._unaryBinaryOrStruct == STRUCT:
-                    # create the litstruct and the struct type
+                    # create the tclitstruct and the struct type
                     vs, names, ts = [], [], []
                     for v, nameToken in t.phrases:
                         names.append(k.sm.parseLitSym(nameToken.src)[1])
@@ -491,7 +490,7 @@ def parsePhrase(tokens, st, k):
                     tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
                     tvstruct = k.litstructCons(tStruct, dict(zip(names, vs)))
                     tokens >> 1
-                    node = litstruct(t.tok1, t.tok2, st, tvstruct)
+                    node = tclitstruct(t.tok1, t.tok2, st, tvstruct)
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:
                     raise NotYetImplemented()
                 else:
@@ -512,7 +511,7 @@ def parsePhrase(tokens, st, k):
                     elif t._unaryBinaryOrStruct == BINARY: style = binary
                     else: raise ProgrammerError()
                     fnSt.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
-                    f = bfunc(t.tok1, t.tok1, fnSt, argnames, BTTuple(*tArgs), tRet, body, style)
+                    f = tcfunc(t.tok1, t.tok1, fnSt, argnames, BTTuple(*tArgs), tRet, body, style)
                     tokens[0] = f
                     # OPEN: handle style conversion and assignment (as we're not always calling a function)
                     node, numConsumed = buildFnApplication(node, Missing, f, st, tokens, k.sm)
@@ -542,10 +541,10 @@ def parsePhrase(tokens, st, k):
                             st.changeVMetaToFnMeta(name)
                         tupleType, tup = parseTupParenOrDestructureGroup(t, st, k)
                         numArgs = 1
-                        fnode = getoverload(t.tok1, st, name, numArgs, LOCAL_SCOPE)      # OPEN handle partials
-                        f = bfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,)*numArgs), TBI, Missing, unary)
+                        fnode = tcgetoverload(t.tok1, st, name, numArgs, LOCAL_SCOPE)      # OPEN handle partials
+                        f = tcfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,)*numArgs), TBI, Missing, unary)
                         overload = st.bindFn(name, f)
-                        node = apply(t.tok1, t.tok2, st, fnode, tup)
+                        node = tcapply(t.tok1, t.tok2, st, fnode, tup)
                         tokens >> 1
                 else:
                     raise ProgrammerError("all other cases should be captured in buildFnApplication")
@@ -559,7 +558,7 @@ def parsePhrase(tokens, st, k):
                 tRet = TBI if t._tRet is Missing else parseTypeLang(t._tRet, k)
                 body = [parsePhrase(phrase, blockSt, k) for phrase in t.phrases]
                 blockSt.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
-                node = block(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRet, body)
+                node = tcblock(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRet, body)
                 tokens[0] = node
                 tokens >> 1
 
@@ -572,7 +571,7 @@ def parsePhrase(tokens, st, k):
                 for phrase in t.phrases:
                     for tok in phrase:
                         paths.append(tok.src)
-                node = load(t.tok1, t.tok2, st, paths)
+                node = tcload(t.tok1, t.tok2, st, paths)
                 k.loadModules(node.paths)
                 tokens >> 1
 
@@ -591,7 +590,7 @@ def parsePhrase(tokens, st, k):
                         else:
                             raise NotYetImplemented(f'tok: {tok}')
                     names.append(name)
-                node = fromimport(t.tok1, t.tok2, st, t.path, names)
+                node = tcfromimport(t.tok1, t.tok2, st, t.path, names)
                 k.importSymbols(node.path, node.names, node.st)
                 tokens >> 1
 

@@ -16,7 +16,7 @@ from coppertop.pipe import _Function, _Dispatcher
 from bones.core.errors import ScopeError
 from bones.lang.core import MAX_NUM_ARGS
 from bones.lang.types import TBI
-from bones.lang.tc import bfunc
+from bones.lang.tc import tcfunc
 from bones.ts.metatypes import BTUnion, BTFn, BTOverload
 from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 
@@ -367,7 +367,7 @@ class SymTab:
 
     def bindFn(self, name, fn):
         if not self.hasF(name): raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, bfunc)) and fn != TBI: raise ProgrammerError()
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, tcfunc)) and fn != TBI: raise ProgrammerError()
         if self._globalSymTab is Missing: raise ScopeError("Missing global scope")
         if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         numargs = fn.numargs
