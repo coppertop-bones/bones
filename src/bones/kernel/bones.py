@@ -69,13 +69,13 @@ class BonesKernel(BaseKernel):
                 f'{line.l:>3}:  {line.src}' >> PP
             '' >> PP
 
-        group = parse_groups.parseStructure(tokens, self.scratch)
+        snippet = parse_groups.parseStructure(tokens, self.scratch)
 
         if context.showGroups:
-            group.PPGroup >> PP
+            snippet.PPGroup >> PP
             '' >> PP
 
-        snippetTc = parse_phrase.parseSnippet(group, self.scratch, self)
+        snippetTc = parse_phrase.parseSnippet(snippet, self.scratch, self)
         if context.showTc:
             tcReport = TcReport()
             snippetTc.PPTC(1, tcReport)
