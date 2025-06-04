@@ -25,7 +25,7 @@ _nodeseed = itertools.count(start=1)
 # **********************************************************************************************************************
 
 class tcnode:
-    __slots__ = ['id', 'tok1', 'tok2', 'st', 'tOut']
+    __slots__ = ['id', 'tok1', 'tok2', 'st', 'tOut']        # st is symbol table
     def __init__(self, tok1, tok2, st):
         self.id = next(_nodeseed)
         self.tok1 = tok1

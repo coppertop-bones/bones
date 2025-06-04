@@ -3,7 +3,9 @@ a: {x}         // unary (1 arg)
 a: {x + y}     // unary (2 args)
 a: {[x,y,z] x+y+z}   // unary (3 args)
 b: {{x + y}}   // binary
-a: b <:unary>
+//a: b <:unary>             // illegal since we need to know if a name is a value or a function in order to parse and
+                            // we can only infer that it is a function in the analysis phase that follows parsing
+// e.g. (1,2,3) a           // could be object function application of object object application
 c: {x + y + z} <:ternary>
 d: {1+1} <:nullary>
 e: {x} <:rau>
