@@ -315,7 +315,7 @@ def PPCloser(tokenTag):
     else:
         return prettyNameByTag[tokenTag]
 
-def parseStructure(tokens, st, TRACE=False):
+def parseStructure(tokens, st, src, TRACE=False):
     stack = _Stack()
     currentG = stack.push(SnippetGroup(Missing, Missing, st))   # this one obviously doesn't need catching!!
     openers = {
@@ -407,6 +407,14 @@ def parseStructure(tokens, st, TRACE=False):
 
         # pop groups off the stack that have finished consuming tokens
         while currentG._tokens is Missing:
+            if isinstance(currentG, TypeLangGroup):
+                currentG.tl = src[currentG.s1:currentG.s2]
+            if isinstance(currentG, ParametersGroup):
+                for p in currentG.phrases:
+                    if len(p) != 1: 1/0
+                    p = p[0]
+                    if p.typePhrase:
+                        p.tl = src[p.typePhrase[0].s1:p.typePhrase[-1].s2]
             stack.pop()
             currentG = stack.current
     while currentG._tokens is not Missing:
@@ -910,13 +918,13 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
     if len(phrase) == 1:
         if isinstance(phrase[0], Token):
             if phrase[0].tag == ASSIGN_LEFT:
-                raise GroupError("Syntax error")
+                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #1"), group, tokenOrGroup)
             elif phrase[0].tag == CONTEXT_ASSIGN_LEFT:
-                raise GroupError("Syntax error")
+                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #2"), group, tokenOrGroup)
             elif phrase[0].tag == GLOBAL_ASSIGN_LEFT:
-                raise GroupError("Syntax error")
+                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #3"), group, tokenOrGroup)
             elif isinstance(phrase[0], TupParenOrDestructureGroup) and phrase[0]._isDestructure:
-                raise GroupError("Syntax error")
+                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #4"), group, tokenOrGroup)
 
     elif len(phrase) >= 2:
         if isinstance(phrase[0], Token):
@@ -972,19 +980,16 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, LOCAL_SCOPE)
                     elif isinstance(group, FrameGroup):
-                        print(f"{group}")
+                        print(f'_processAssigmentsInPhrase<FrameGroup>: {group}')
                     elif isinstance(prior, type):
-                        print(f"{group}")
-
-                    # elif isinstance(prior, Token) and prior.tag == NAME:
-                    #     name = prior.src
-                    #     if (m := st.fMetaForGet(name, LOCAL_SCOPE)):
-                    #         st.defFnMeta(varName, m.t, LOCAL_SCOPE)
-                    #         st.defFnMeta(varName, m.t, LOCAL_SCOPE)
-                    #     elif (m := st.vMetaForGet(name, LOCAL_SCOPE)):
-                    #         st.defVMeta(varName, m.t, LOCAL_SCOPE)
+                        print(f'_processAssigmentsInPhrase<type>: {group}')
                     else:
-                        st.defVMeta(varName, TBI, LOCAL_SCOPE)
+                        # b: {{x + y}}
+                        # a: b <:unary>     <<<< here a is being bound to as a unary function but we have no idea
+                        #                        what a's type is until we analyse the phrase
+                        if not st.fMetaForGet(varName, LOCAL_SCOPE) and not st.vMetaForGet(varName, LOCAL_SCOPE):
+
+                            st.defVMeta(varName, TBI, LOCAL_SCOPE)
                 elif each.tag == CONTEXT_ASSIGN_RIGHT:
                     varName = each.src[5:]
                     numNames += 1
@@ -992,7 +997,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, CONTEXT_SCOPE)
                     elif isinstance(group, FuncOrStructGroup):
-                        raise GroupError("Can't context assign with frame group")
+                        raise GroupError("Can't context assign with frame group", ErrSite("_processAssigmentsInPhrase #5"), group, tokenOrGroup)
                     else:
                         st.defVMeta(varName, TBI, CONTEXT_SCOPE)
                 elif each.tag == GLOBAL_ASSIGN_RIGHT:
@@ -1002,12 +1007,12 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, GLOBAL_SCOPE)
                     elif isinstance(group, FuncOrStructGroup):
-                        raise GroupError("Can't global assign with frame group")
+                        raise GroupError("Can't global assign with frame group", ErrSite("_processAssigmentsInPhrase #6"), group, tokenOrGroup)
                     else:
                         st.defVMeta(varName, TBI, GLOBAL_SCOPE)
                     st.defVMeta(varName, TBI, GLOBAL_SCOPE)
             except Exception as ex:
-                raise GroupError(f"l1: {repr(group)} l2: {group.l2}") from ex
+                raise GroupError(f"l1: {repr(group)} l2: {group.l2}", ErrSite("_processAssigmentsInPhrase #7"), group, tokenOrGroup) from ex
         elif isinstance(each, TupParenOrDestructureGroup) and each._isDestructure:
             numNames += len(each.grid[0])
         if isinstance(each, TypeLangGroup):
@@ -1347,13 +1352,13 @@ class ParametersGroup(_Phrases):
         # five cases "fred: num", "fred:num", "fred :num",  "fred : num", "fred" - we could add some context to the
         # lexer to simplify our job here but for the moment let's not make it more complex
         phrase = self._tokens
-        for token in phrase:
-            if not isinstance(token, Token):
-                raise GroupError(
-                    f'Parameter must be a name - got "{token}" - handle in _consumeToken - {token.l1}:{token.l2}',
-                    ErrSite(self.__class__, "Param must be a name"),
-                    self, token
-                )
+        # for token in phrase:
+        #     if not isinstance(token, Token):
+        #         raise GroupError(
+        #             f'Parameter must be a name - got "{token}" - handle in _consumeToken - {token.l1}:{token.l2}',
+        #             ErrSite(self.__class__, "Param must be a name"),
+        #             self, token
+        #         )
         if len(phrase) == 0:
             raise GroupError(
                 f'{{[] has no arguments @{self.l1}:{self.c1}',
@@ -1437,16 +1442,17 @@ class ParametersGroup(_Phrases):
 
 class Parameter(_Phrase):
     _isInteruptable = False
-    __slots__ = ['nameToken', 'typePhrase']
+    __slots__ = ['nameToken', 'typePhrase', 'tl']
     def __init__(self, parent, nameToken, typePhrase, st):
         super().__init__(parent, nameToken, st)
         self.nameToken = nameToken
         self.typePhrase = typePhrase
+        tl = Missing
     @property
     def PPGroup(self):
         return self.nameToken.PPGroup + ":t"
     def __repr__(self):
-        return self.nameToken.src + (":TBI" if not self.typePhrase else ':...')
+        return self.nameToken.src + ':' + (self.tl or 'TBI')
     @property
     def PPDebug(self):
         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
@@ -1520,10 +1526,11 @@ def catchLAngleColon(token, currentG, stack):
 
 class TypeLangGroup(_Phrase):
     _isInteruptable = False
-    __slots__ = []
+    __slots__ = ['tl']
     def __init__(self, parent, opener, st):
         super().__init__(parent, opener, st)
         self._isComplete = False
+        self.tl = Missing
     def _processCloserOrAnswerError(self, token):
         if token.tag != R_ANGLE: return prettyNameByTag[R_ANGLE]
         if self._tokens is Missing: raise ProgrammerError()
@@ -1539,7 +1546,8 @@ class TypeLangGroup(_Phrase):
             ErrSite(self.__class__, "_finishPhrase"),
             self, tokenOrGroup
         )
-
+    def _consumeToken(self, tokenOrGroup, indent):
+        return self
     def _finalise(self, tokenOrGroup):
         try:
             if not self._isComplete:
@@ -2280,6 +2288,14 @@ def pairwise(iterable):
 handlersByErrSiteId.update({
     ('bones.lang.parse_groups', Missing, 'parseStructure', 'Unhandled token') : '...',
     ('bones.lang.parse_groups', Missing, 'parseStructure', 'wanted got') : '...',
+
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #1'): '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #2') : '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #3') : '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #4') : '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #5') : '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #6') : '...',
+    ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #7') : '...',
     ('bones.lang.parse_groups', Missing, '_processAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
 
     ('bones.lang.parse_groups', 'FromImportGroup', '_consumeToken', 'requires import after path') : '...',

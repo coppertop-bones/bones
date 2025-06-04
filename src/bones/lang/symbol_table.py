@@ -323,7 +323,6 @@ class SymTab:
             m = self._globalSymTab._tMetaByName.get(name, Missing)
         return m
 
-
     def defVMeta(self, name, t, scope):
         if scope == LOCAL_SCOPE:
             currentMeta = self._newVMetaByName.get(name, Missing)
