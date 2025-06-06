@@ -11,7 +11,7 @@ import builtins
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.lang.core import LOCAL_SCOPE
-from bones.lang.types import litdec, litint, litsym, litsyms, littxt, litdate
+from bones.lang.types import litnum, litint, litsym, litsyms, littxt, litdate
 from bones.kernel.sym import SymManager
 
 
@@ -34,10 +34,10 @@ class PythonStorageManager:
         self.stack = []
 
     def parseLitInt(self, s):
-        return litint, builtins.int(s)
+        return litint(s)
 
-    def parseLitDec(self, s):
-        return litdec, float(s)
+    def parseLitNum(self, s):
+        return litnum(s)
 
     def parseLitDate(self, s):
         raise NotYetImplemented()
@@ -52,13 +52,13 @@ class PythonStorageManager:
         raise NotYetImplemented()
 
     def parseLitUtf8(self, s):
-        return littxt, s
+        return littxt(s)
 
-    def parseLitSym(self, s):
-        return litsym, self.syms.Sym(s)
+    def parseSym(self, s):
+        return self.syms.Sym(s)
 
     def parseLitSyms(self, ss):
-        return litsyms, [self.syms.Sym(s) for s in ss]
+        return litsyms([self.syms.Sym(s) for s in ss])
 
     def newTuple(self):
         raise NotYetImplemented()
@@ -107,6 +107,19 @@ class PythonStorageManager:
         return frame.values.get(name, Missing)
 
     def getOverload(self, st, scope, name, numargs):
+        # check local frame first (as the function may have been passed as an argument)
+        if scope == LOCAL_SCOPE:
+            frame = self.stack[-1] if self.stack else self.framesForSymTab(st)
+        else:
+            raise NotImplementedError()
+        if (ov := frame.values.get(name, Missing)) is Missing:
+            # do the usual st search
+            fnMeta = st.fMetaForGet(name, scope)   # get the meta using just the name
+            ov = fnMeta.st.getOverload(name, numargs)  # get the fn using the name and number of args
+            if ov is Missing: raise ProgrammerError()
+        return ov
+
+    def getFamily(self, st, scope, name):
         # check local frame first (as the function may have been passed as an argument)
         if scope == LOCAL_SCOPE:
             frame = self.stack[-1] if self.stack else self.framesForSymTab(st)

@@ -219,7 +219,7 @@ class SymTab:
         return name in self._newVMetaByName or name in self._vMetaByName
 
     def hasT(self, name):
-        return name in self._newTMetaByName or name in self._tMetaByName
+        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
 
     def noteGets(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -330,7 +330,8 @@ class SymTab:
             if currentMeta is not Missing and currentMeta.t != t:
                 raise NotYetImplemented("Can't merge or redefine the types of values yet")
             if name in self._newFnMetaByName or name in self._fnMetaByName:
-                raise NotYetImplemented("A name can only refer to a value or an fn")
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
             meta = VMeta(t, self)
             self._newVMetaByName[name] = meta
             return meta
@@ -414,6 +415,13 @@ class SymTab:
         del self._newVMetaByName[name]
         self.defFnMeta(name, TBI, LOCAL_SCOPE)
         return self._newFnMetaByName[name]
+
+    def changeFnMetaToVMeta(self, name):
+        oldT = self._newFnMetaByName[name].t
+        assert oldT == TBI
+        del self._newFnMetaByName[name]
+        self.defVMeta(name, TBI, LOCAL_SCOPE)
+        return self._newVMetaByName[name]
 
 
 
