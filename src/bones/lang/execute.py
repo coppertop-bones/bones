@@ -79,7 +79,10 @@ class TCInterpreter:
                 return ret
 
             elif isinstance(fn, _Function):
-                ret = fn.pyfn(*args)
+                if fn.pass_tByT:
+                    ret = fn.pyfn(*args, tByT=schemaVars)
+                else:
+                    ret = fn.pyfn(*args)
                 if hasattr(ret, '_t'):
                     if ret._t:
                         # check the actual return type fits the declared return type
