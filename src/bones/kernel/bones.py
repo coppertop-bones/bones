@@ -9,7 +9,7 @@
 
 import itertools, sys, collections
 from bones.core.sentinels import Missing, Void
-from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError
+from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError, NotYetImplemented
 from bones.kernel.base import BaseKernel
 from bones.lang import parse_phrase, parse_groups, lex
 from bones.lang.infer import Simplifier, visit, InferenceLogger
@@ -29,11 +29,11 @@ pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 class BonesKernel(BaseKernel):
 
     __slots__ = [
-        'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch', 'litdateCons', 'littupCons',
-        'litstructCons', 'litframeCons'
+        'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch', 'litdateCons', 'litsymCons',
+        'littupCons', 'litstructCons', 'litframeCons'
     ]
 
-    def __init__(self, sm, *, litdateCons, littupCons, litstructCons, litframeCons):
+    def __init__(self, sm, *, litdateCons, litsymCons, littupCons, litstructCons, litframeCons):
         super().__init__(sm)
         self.srcById = {}
         self.linesById = {}
@@ -41,6 +41,7 @@ class BonesKernel(BaseKernel):
         self.infercache = set()
         self.sm = sm
         self.litdateCons = litdateCons
+        self.litsymCons = litsymCons
         self.littupCons = littupCons
         self.litstructCons = litstructCons
         self.litframeCons = litframeCons
@@ -150,7 +151,7 @@ class BonesKernel(BaseKernel):
 
 
 
-    def importSymbols(self, path, names, ctx):
+    def importSymbols(self, path, names, st):
         if (mod := self.modByPath.get(path, Missing)) is Missing:
             raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
         for name in names:
@@ -168,11 +169,11 @@ class BonesKernel(BaseKernel):
                 if importee is Missing:
                     raise ImportError(f"Can't find '{name}' in {path}", ErrSite("Can't find name"))
             if isinstance(importee, BType):
-                if ctx.hasT(name):
-                    # for the moment only import new names handle overloading later
+                if st.hasT(name):
+                    # OPEN: check that it's the same type else we need type namespaces implementing to handle this
                     pass
                 else:
-                    current = ctx.tMetaForGet(name)
+                    current = st.tMetaForGet(name)
                     if current is not Missing:
                         if importee is not current:
                             raise ImportError(f"Trying to import '{name}'({importee}) but it is already defined as {current}")
@@ -180,40 +181,38 @@ class BonesKernel(BaseKernel):
                             # already imported so nothing to do
                             pass
                     else:
-                        ctx.defType(name, importee)
+                        st.defTMeta(name, importee)
             elif isinstance(importee, jones._fn):
-                if ctx.hasF(name):
-                    # for the moment only import new names handle overloading later
-                    pass
+                st.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
+                if isinstance(importee.d, _Dispatcher):
+                    for fnBySig in importee.d.fnBySigByNumArgs:
+                        for d in fnBySig.values():
+                            style = d.style
+                            currentStyle = self.styleByName.setdefault(name, style)
+                            if style != currentStyle: raise ImportError("oh dear")
+                            st.bindFn(name, d)
                 else:
-                    ctx.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
-                    if isinstance(importee.d, _Dispatcher):
-                        for fnBySig in importee.d.fnBySigByNumArgs:
-                            for d in fnBySig.values():
-                                style = d.style
-                                currentStyle = self.styleByName.setdefault(name, style)
-                                if style != currentStyle: raise ImportError("oh dear")
-                                ctx.bindFn(name, d)
-                    else:
-                        style = importee.d.style
-                        currentStyle = self.styleByName.setdefault(name, style)
-                        if style != currentStyle: raise ImportError("oh dear")
-                        ctx.bindFn(name, importee.d)
+                    style = importee.d.style
+                    currentStyle = self.styleByName.setdefault(name, style)
+                    if style != currentStyle: raise ImportError("oh dear")
+                    st.bindFn(name, importee.d)
 
             elif hasattr(importee, "_t"):
 
-                if ctx.hasV(name):
+                if st.hasV(name):
                     # for the moment only import new names handle overloading later
                     pass
                 else:
-                    ctx.defVMeta(name, importee._t, LOCAL_SCOPE)
+                    st.defVMeta(name, importee._t, LOCAL_SCOPE)
             else:
                 raise ProgrammerError()
 
-    def importedValues(self, path, names):
+
+
+    def importValues(self, path, names, st):
+        nvs = {}
         if (mod := self.modByPath.get(path, Missing)) is Missing:
             raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
-        nvs = {}
         for name in names:
             importee = Missing
             if hasattr(mod, name):
@@ -233,11 +232,15 @@ class BonesKernel(BaseKernel):
                 pass
 
             elif hasattr(importee, "_t"):
+                # imports can only be done at module level, i.e. LOCAL_SCOPE
+                st.defVMeta(name, importee._t, LOCAL_SCOPE)
                 nvs[name] = importee
 
             else:
                 raise ProgrammerError()
+
         return nvs
+
 
 
 handlersByErrSiteId.update({

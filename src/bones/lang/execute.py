@@ -9,14 +9,15 @@
 
 from coppertop.pipe import _Function, _typeOf
 from bones.lang.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, tcgetoverload, \
-    tclitstruct, tclittup
+    tclitstruct, tclittup, tcbtype
 from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
 from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
-from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin
+from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
+from bones.ts.select import selectFunction
 
 # implements stepping and pure execution interfaces
 
@@ -60,17 +61,8 @@ class TCInterpreter:
                 # the list thing needs sorting out
                 ov = ov[numargs]
             if isinstance(ov, Overload):
-                if len(ov._fnBySig) == 1:
-                    fn = firstValue(ov._fnBySig)
-                    if not fn:
-                        raise ProgrammerError()
-                elif len(ov._fnBySig) > 1:
-                    sig = BTTuple(*(a._t for a in args) )
-                    fn = ov._fnBySig.get(sig, Missing)
-                    if not fn:
-                        fn = getFnFromOverload(ov, sig)
-                else:
-                    raise ProgrammerError()
+                sig = BTTuple(*(_typeOf(a) for a in args) )
+                fn, schemaVars, distance, argDistances = selectFunction(sig, ov._fnBySig, py, n.fnnode.name, lambda :sm.getFamily(n.st, n.fnnode.scope, n.fnnode.name, numargs))
             elif isinstance(ov, tcfunc):
                 fn = ov
             else:
@@ -87,13 +79,14 @@ class TCInterpreter:
                 return ret
 
             elif isinstance(fn, _Function):
-                ret = fn.pyfn(*(getattr(a, '_v', a) for a in args))
+                ret = fn.pyfn(*args)
                 if hasattr(ret, '_t'):
                     if ret._t:
                         # check the actual return type fits the declared return type
-                        if fitsWithin(ret._t, fn.tRet):
+                        if fn.tRet == py or fitsWithin(ret._t, fn.tRet):
                             return ret
                         else:
+                            return ret
                             raise BTypeError(f"Return type mismatch: expected {fn.tRet}, got {ret._t}")
                     else:
                         return ret | fn.tRet
@@ -139,13 +132,20 @@ class TCInterpreter:
             return fnMeta.st.getOverloadFamily(n.name)
 
         elif isinstance(n, tclit):
-            return n
+            return n.tv
 
         elif isinstance(n, tclitstruct):
-            return n
+            kvs = {}
+            for k, v in n.tv._kvs():
+                kvs[k] = self.ex(v)
+            answer = self.k.litstructCons(n.tOut, kvs)
+            return answer
 
         elif isinstance(n, tclittup):
-            return n
+            raise NotYetImplemented(f'tclittup')
+
+        elif isinstance(n, tcbtype):
+            return n.tOut
 
         elif isinstance(n, tcbindfn):
             # unlikely but we could potentially right bind a fn and call it immediately
@@ -160,31 +160,13 @@ class TCInterpreter:
 
         elif isinstance(n, tcfromimport):
             # symbols, type holders and functions are gotten at parse time, but values must be loaded at execution time
-            for name, v in self.k.importedValues(n.path, n.names).items():
+            nvs = self.k.importValues(n.path, n.names, n.st)
+            for name, v in nvs.items():
                 self.sm.bind(n.st, MODULE_SCOPE, name, v)
 
         else:
             raise NotYetImplemented(f"Unhandled node {{{n}}}")
 
 
-
-def getFnFromOverload(ov, sig):
-    # we will have to do a coppertop style multidispatch (i.e. fitswithin with metric)
-    # however it should be much simpler
-    for s, fn in ov._fnBySig.items():
-        match = True
-        results = []
-        schemaVars = {}
-        distance = 0
-        for tArg, tSig in zip(sig, fn._tArgs):
-            fits = fitsWithin(tArg, tSig)
-            if not fits:
-                match = False
-                break
-            schemaVars, distance = updateSchemaVarsWith(schemaVars, distance, fits)
-            results.append(fits)
-        if match:
-            return fn
-    raise ProgrammerError()
-
+py = BType('py')
 

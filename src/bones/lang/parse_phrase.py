@@ -36,13 +36,14 @@ from bones.lang.parse_groups import \
     FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
 from bones.lang.symbol_table import VMeta, FnMeta
 from bones.lang.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
-    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock
+    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tcbtype
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI
 from bones.lang.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
 from bones.ts.type_lang import TypeLangInterpreter
+from bones.ts.metatypes import BType
 
 
 def parseSnippet(snippetGroup, st, k):
@@ -281,20 +282,20 @@ def parseSingle(t, st, k):
     if isinstance(t, Token):
         tag = t.tag
         if tag == NAME:
-            name = t.src
+            nameAndAccessors = t.src.split('.')
+            name, accessors = nameAndAccessors[0], nameAndAccessors[1:]
             meta = st.fOrVMetaForGet(name, LOCAL_SCOPE)
             if meta is Missing: raise SentenceError(f'unknown name - {name}')
             if isinstance(meta, VMeta):
-                accessors = []
                 return tcgetval(t.tok1, meta.st, LOCAL_SCOPE, name, accessors).setTOut(meta.t)
             else:
                 return tcgetfamily(t.tok1, meta.st, name, LOCAL_SCOPE)
         elif tag == INTEGER:
-            return tclit(t.tok1, st, *k.sm.parseLitInt(t.src))
+            return tclit(t.tok1, st, k.sm.parseLitInt(t.src))
         elif tag == DECIMAL:
-            return tclit(t.tok1, st, *k.sm.parseLitDec(t.src))
+            return tclit(t.tok1, st, k.sm.parseLitNum(t.src))
         elif tag == TEXT:
-            return tclit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
+            return tclit(t.tok1, st, k.sm.parseLitUtf8(t.src))
         else:
             missingTag = prettyNameByTag[tag]
             raise NotYetImplemented()
@@ -437,27 +438,27 @@ def parsePhrase(tokens, st, k):
                     tokens >> 1
 
             elif tag == INTEGER:
-                node = tclit(t.tok1, st, *k.sm.parseLitInt(t.src))
+                node = tclit(t.tok1, st, k.sm.parseLitInt(t.src))
                 tokens >> 1
 
             elif tag == DECIMAL:
-                node = tclit(t.tok1, st, *k.sm.parseLitDec(t.src))
+                node = tclit(t.tok1, st, k.sm.parseLitNum(t.src))
                 tokens >> 1
 
             elif tag == TEXT:
-                node = tclit(t.tok1, st, *k.sm.parseLitUtf8(t.src))
+                node = tclit(t.tok1, st, k.sm.parseLitUtf8(t.src))
                 tokens >> 1
 
             elif tag == SYM:
-                node = tclit(t.tok1, st, *k.sm.parseLitSym(t.src))
+                node = tclit(t.tok1, st, k.litsymCons(k.sm.parseSym(t.src)))
                 tokens >> 1
 
             elif tag == SYMS:
-                node = tclit(t.tok1, st, *k.sm.parseLitSyms(t.src))
+                node = tclit(t.tok1, st, k.sm.parseLitSyms(t.src))
                 tokens >> 1
 
             elif tag == DATE:
-                node = tclit(t.tok1, st, *k.sm.parseLitDate(t.src))
+                node = tclit(t.tok1, st, k.sm.parseLitDate(t.src))
                 tokens >> 1
 
             elif tag in (
@@ -482,9 +483,10 @@ def parsePhrase(tokens, st, k):
                 if t._unaryBinaryOrStruct == STRUCT:
                     # create the tclitstruct and the struct type
                     vs, names, ts = [], [], []
-                    for v, nameToken in t.phrases:
-                        names.append(k.sm.parseLitSym(nameToken.src)[1])
-                        node = parsePhrase([v], st, k)
+                    for phrase in t.phrases:
+                        v, nameToken = phrase[:-1], phrase[-1]
+                        names.append(k.sm.parseSym(nameToken.src))
+                        node = parsePhrase(v, st, k)
                         vs.append(node)
                         ts.append(node.tOut)
                     tStruct = BTStruct(names, ts) & bones.lang.types.litstruct
@@ -595,7 +597,8 @@ def parsePhrase(tokens, st, k):
                 tokens >> 1
 
             elif isinstance(t, TypeLangGroup):
-                raise NotYetImplemented()
+                node = tcbtype(t.tok1, t.tok2, st, BType(t.tl))
+                tokens >> 1
 
             else:
                 raise ProgrammerError()

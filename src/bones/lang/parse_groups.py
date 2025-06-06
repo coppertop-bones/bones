@@ -408,7 +408,7 @@ def parseStructure(tokens, st, src, TRACE=False):
         # pop groups off the stack that have finished consuming tokens
         while currentG._tokens is Missing:
             if isinstance(currentG, TypeLangGroup):
-                currentG.tl = src[currentG.s1:currentG.s2]
+                currentG.tl = src[currentG.s1+2:currentG.s2-1]
             if isinstance(currentG, ParametersGroup):
                 for p in currentG.phrases:
                     if len(p) != 1: 1/0
@@ -1352,13 +1352,13 @@ class ParametersGroup(_Phrases):
         # five cases "fred: num", "fred:num", "fred :num",  "fred : num", "fred" - we could add some context to the
         # lexer to simplify our job here but for the moment let's not make it more complex
         phrase = self._tokens
-        # for token in phrase:
-        #     if not isinstance(token, Token):
-        #         raise GroupError(
-        #             f'Parameter must be a name - got "{token}" - handle in _consumeToken - {token.l1}:{token.l2}',
-        #             ErrSite(self.__class__, "Param must be a name"),
-        #             self, token
-        #         )
+        for token in phrase:
+            if isinstance(token, TypeLangGroup):
+                raise GroupError(
+                    f'Parameter types must be specified after a : not with <:...>, e.g. "{token}" - _consumeToken - {token.l1}:{token.l2}',
+                    ErrSite(self.__class__, "Param type must not be <:...>"),
+                    self, token
+                )
         if len(phrase) == 0:
             raise GroupError(
                 f'{{[] has no arguments @{self.l1}:{self.c1}',
@@ -2305,7 +2305,7 @@ handlersByErrSiteId.update({
     ('bones.lang.parse_groups', 'LoadGroup', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
 
     ('bones.lang.parse_groups', 'ParametersGroup', '_finishPhrase', 'no args') : '...',
-    ('bones.lang.parse_groups', 'ParametersGroup', '_finishPhrase', 'Param must be a name') : '...',
+    ('bones.lang.parse_groups', 'ParametersGroup', '_finishPhrase', 'Param type must not be <:...>') : '...',
     ('bones.lang.parse_groups', 'ParametersGroup', '_consumeToken', 'assign right') : '...',
 
     ('bones.lang.parse_groups', 'SnippetGroup', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
