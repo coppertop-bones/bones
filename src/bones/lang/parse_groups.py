@@ -255,7 +255,6 @@ from bones.lang.lex import prettyNameByTag, Token, \
 from bones.lang.types import nullary, unary, binary, ternary, TBI
 
 # tuple / paren / destructure style
-MAYBE_DESTRUCTURE = -1      # temporary state
 TUPLE_NULL = 1
 TUPLE_2D = 2
 TUPLE_OR_PAREN = 3
@@ -264,8 +263,7 @@ TUPLE_1_EMPTY = 5
 TUPLE_2_EMPTY = 6
 TUPLE_3_EMPTY = 7
 TUPLE_4_PLUS_EMPTY = 8
-NOT_YET_PIPEABLE = 9
-DESTRUCTURE = 10
+DESTRUCTURE = 9
 
 # function / struct style
 UNARY_OR_STRUCT = 1
