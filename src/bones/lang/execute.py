@@ -18,6 +18,7 @@ from bones.core.utils import firstValue
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
 from bones.ts.select import selectFunction
+import bones.lang.tc
 
 # implements stepping and pure execution interfaces
 
@@ -32,7 +33,6 @@ def stepBc(bc, ctx, stepState):
     raise NotYetImplemented()
 
 
-
 class TCInterpreter:
 
     # we use boxed values here as to do otherwise, e.g. only using type-tags for unions, would require a compilation
@@ -43,10 +43,12 @@ class TCInterpreter:
         self.sm = kernel.sm
 
     def executeTc(self, snippet):
+        bones.lang.tc.k = self.k
         for i, n in enumerate(snippet.nodes):
             # context.tt  << i + 1
             answer = self.ex(n)
             if answer == None: answer = Void
+        bones.lang.tc.k = Missing
         return answer
 
     def ex(self, n):
@@ -69,14 +71,7 @@ class TCInterpreter:
                 raise ProgrammerError()
 
             if isinstance(fn, tcfunc):
-                frame = sm.pushFrame(fn.st)
-                for name, arg in zip(fn.argnames, args):
-                    sm.bind(frame.st, LOCAL_SCOPE, name, arg)
-                for n2 in fn.body:
-                    val = self.ex(n2)
-                if (ret := sm.getReturn(frame.st, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
-                sm.popFrame()
-                return ret
+                return fn(*args)
 
             elif isinstance(fn, _Function):
                 if fn.pass_tByT:
@@ -145,10 +140,15 @@ class TCInterpreter:
             return answer
 
         elif isinstance(n, tclittup):
-            raise NotYetImplemented(f'tclittup')
+            elems = [self.ex(e) for e in n.tv._v]
+            answer = self.k.littupCons(n.tOut, elems)
+            return answer
 
         elif isinstance(n, tcbtype):
             return n.tOut
+
+        elif isinstance(n, tcfunc):
+            return n
 
         elif isinstance(n, tcbindfn):
             # unlikely but we could potentially right bind a fn and call it immediately

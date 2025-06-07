@@ -15,8 +15,11 @@ from bones.core.sentinels import Missing
 from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
 from bones.ts.metatypes import BType, BTFn, BTTuple
 from bones.lang.types import void, TBI, null
+from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME
 
 _nodeseed = itertools.count(start=1)
+
+k = Missing
 
 
 
@@ -144,7 +147,14 @@ class tcfunc(tcblock):
         super().__init__(tok1, tok2, st, argnames, tArgs, tRet, body)
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
-        raise NotYetImplemented()
+        frame = k.sm.pushFrame(self.st)
+        for name, arg in zip(self.argnames, args):
+            k.sm.bind(frame.st, LOCAL_SCOPE, name, arg)
+        for n2 in self.body:
+            val = k.tcrunner.ex(n2)
+        if (ret := k.sm.getReturn(frame.st, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+        k.sm.popFrame()
+        return ret
 
 class tcassumedfunc(tcfunc): pass
 
