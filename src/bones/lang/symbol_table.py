@@ -27,9 +27,9 @@ from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCO
 #   contexts can see other contexts - e.g. the global, module, context scope context and lexicalParent
 #
 # scoping rules determine how the context that defines a name is discovered - thus are behaviours not objects
-#   types are only used inside <:..> etc and are stored in the global context (we may add module types if needed later)
+#   types are only used inside <:..> etc and are stored in the global context (the plan is to add type namespaces)
 #   value scopes don't inherit - can access immediate parent with .fred and module with ..CONST
-#   function scopes inherit from their lexical parent all the way up to modules
+#   function scopes inherit from their lexical parent all the way up to module
 #   functions are not allowed in global context
 #
 # pipeline styles are kept globally in the kernel - so we know the set of function names, however we can have a local 

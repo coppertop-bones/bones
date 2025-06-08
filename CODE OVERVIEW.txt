@@ -1,0 +1,100 @@
+DIRECTORY STRUCTURE
+
+bones - implementation of the bones language
+    ├── canon - .b and .bdoc files that cover every language feature and are considered good for reference purposes
+    ├── docs - bones langauge documentation
+    ├── src - python source
+    └── README.md
+
+
+ESSENTIAL COMMENTS
+See:
+bones.lange.parse_groups - for the overall structual grammar of bones
+bones.lange.symbol_table - discussion of scope
+
+
+PACE
+
+PACE stands for Parse, Analyse, Compile and Execute. Breaking down the process of running code into these explicit four
+phases allows us to create a kernel that can be used interactively, e.g. a REPL or Jupyter/Marimo Notebook, etc, whilst
+also providing best of breed "static" analysis - see https://www.waterstones.com/book/algebraic-subtyping/stephen-dolan/9781780174150.
+which also makes it possible to compile optimised machine-code, potentially on the fly.
+
+PACE - PARSE
+Parsing is done in three steps:
+1. source code is lexed into tokens (which point back to their source) - see bones.lang.lex
+2. tokens are split into groups of phrases and symbol table entries created - see bones.lang.parse_groups
+3. each phrase is parsed, in such a way that function styles (i.e. unary, binary, etc) are determined before use, and
+   combined with other phrases and groups into tree-code nodes, updating the symbol table as necessary - see
+   bones.lang.parse_phrases
+
+PACE - ANALYSE
+The tree-code can be analysed to ensure type correctness and minimise the dispatch matrix at each function application.
+
+PACE - COMPILE
+The plan is to generate byte-code and machine-code from analysed tree-code, via MIR (see
+https://github.com/vnmakarov/mir). Possibly also QBE (see https://c9x.me/compile/ - simple though hostile to windows)
+and LLVM (notoriously complicated but industry standard).
+
+PACE - EXECUTE
+Currently we just execute the tree-code directly.
+
+
+SCOPE
+
+Global scope - holds types, values in the global key-value store, and function name to style mappings
+Module scope - holds functions and values (which may only be set with module level code, so effectively constants)
+Local scope - holds values and functions
+Lexical Parent scope - allows access to variables and functions in the lexical parent scope (i.e. not necessarily the
+caller)
+Contextual scope - allows functions in the stack to immutably update a shared context thus acting like a contained set
+of variables replacing the need for monads but in a way that can be analysed and optimised by the compiler.
+
+
+CLOSURES
+
+We don't implement closures in the traditional sense, instead we use a lexical parent scope to allow access to
+variables which internally are passed as arguments to functions, thus can be passed in registers, on the memory stack or
+as closures.
+
+
+TREE-CODE NODE TYPES
+
+tcsnippet - ordered list of nodes in same context
+
+functions / blocks
+tcapply - block and func application
+tcblock - shares containing context and may take arguments and return a value
+tcfunc - creates a new context and may take arguments and return a value
+
+tccoerce
+tcpartialcheck - checks that a value is of a given type, e.g. int, txt, etc
+
+bind / get
+tcbindval - binds a name to a value
+tcgetval - gets a value for a name
+tcbindfn - binds a name to a function potentially creating an overload or family
+tcgetfamily - gets a family of functions that match a name
+tcgetoverload - gets an overload of functions that match a name and argument count
+
+literals
+tclit - for literal symbol, symbols, dates, integers, numbers and text
+tclittup - literal tuple
+tclitstruct - literal struct
+tclitframe - literal frame
+tclitbtype - literal type
+
+modules
+tcload - loads a module into memory
+tcfromimport - imports symbols from a loaded module
+
+
+ABBRIEVIATION CHEATSHEET
+
+gp - group
+tl - typelang
+
+
+NAMING CONVENTIONS
+
+

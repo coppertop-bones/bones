@@ -7,6 +7,16 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
+# tcsnippet - ordered list of nodes in same context
+# tcapply, tcblock, tcfunc
+# tccoerce
+# tcpartialcheck
+# tcbindval, tcgetval, tcbindfn, tcgetfamily, tcgetoverload
+# tclit, tclittup, tclitstruct, tclitframe, tclitbtype
+# tcvoidphrase
+# tcload, tcfromimport
+
+
 import sys
 if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
@@ -93,6 +103,7 @@ class tcapply(tcnode):
         return self._tArgs
 
 class tcblock(tcnode):
+    # OPEN: Are _t, tRet, tArgs properties need for analysis or just to allow tcfunc to be callable from Python
     __slots__ = ['argnames', '_tArgs', 'numargs', 'body', '_t_']
     @classmethod
     def TCName(cls):
@@ -137,8 +148,6 @@ class tcblock(tcnode):
         return f'{{[{", ".join(nameTs)}] -> {self.tOut}}}'
 
 class tcfunc(tcblock):
-    # is a function anything more than a block with its own scope and style?
-    # can also be called as a normal function from coppertop hence has _t, tRet, tArgs properties and __call__
     __slots__ = ['literalstyle']
     @classmethod
     def TCName(cls):
@@ -147,6 +156,7 @@ class tcfunc(tcblock):
         super().__init__(tok1, tok2, st, argnames, tArgs, tRet, body)
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
+        # this allows the function to be called as a normal function from puthon
         frame = k.sm.pushFrame(self.st)
         for name, arg in zip(self.argnames, args):
             k.sm.bind(frame.st, LOCAL_SCOPE, name, arg)
@@ -202,7 +212,7 @@ class tcbindval(tcnode):
     def nodepath(self):
         return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
-        return f'bind: {self.nodepath} = {self.vnode.nodepath}'
+        return f'tcbindval: {self.nodepath} = {self.vnode.nodepath}'
 
 class tcgetval(tcnode):
     __slots__ = ['scope', 'name', 'accessors']
@@ -219,7 +229,7 @@ class tcgetval(tcnode):
     def nodepath(self):
         return f'{self.st.path}.{self.name}.{self.id}'
     def __repr__(self):
-        return f"get: {self.nodepath}"
+        return f"tcgetval: {self.nodepath}"
 
 
 # **********************************************************************************************************************
@@ -243,6 +253,20 @@ class tcbindfn(tcnode):
     def __repr__(self):
         return f'tcbindfn: {self.nodepath} = {self.fnode.nodepath}'
 
+class tcgetfamily(tcnode):
+    __slots__ = ['name', 'scope']
+    def __init__(self, tok1, st, name, scope):
+        super().__init__(tok1, tok1, st)
+        self.name = name >> assertIs(str)
+        self.scope = scope
+    def PPTC(self, depth, report):
+        report << TcReportLine(self, depth, f'getfamily {self.st.path}.{self.name}')
+    @property
+    def nodepath(self):
+        return f'{self.st.path}.{self.name}.{self.id}'
+    def __repr__(self):
+        return f'tcgetfamily: {self.nodepath} {self.name}'
+
 class tcgetoverload(tcnode):
     __slots__ = ['name', 'scope', 'numargs']
     def __init__(self, tok1, st, name, numargs, scope):
@@ -257,20 +281,6 @@ class tcgetoverload(tcnode):
         return f'{self.st.path}.{self.name}_{self.numargs}.{self.id}'
     def __repr__(self):
         return f'tcgetoverload: {self.nodepath}'
-
-class tcgetfamily(tcnode):
-    __slots__ = ['name', 'scope']
-    def __init__(self, tok1, st, name, scope):
-        super().__init__(tok1, tok1, st)
-        self.name = name >> assertIs(str)
-        self.scope = scope
-    def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'getfamily {self.st.path}.{self.name}')
-    @property
-    def nodepath(self):
-        return f'{self.st.path}.{self.name}.{self.id}'
-    def __repr__(self):
-        return f'tcgetfamily: {self.nodepath} {self.name}'
 
 
 # **********************************************************************************************************************
@@ -322,7 +332,7 @@ class tclitframe(tcnode):
     def __repr__(self):
         return f"tclitframe: {self.nodepath} {self.tOut}"
 
-class tcbtype(tcnode):
+class tclitbtype(tcnode):
     __slots__ = []
     def __init__(self, tok1, tok2, st, t):
         super().__init__(tok1, tok2, st)
@@ -330,20 +340,7 @@ class tcbtype(tcnode):
     def PPTC(self, depth, report):
         report << TcReportLine(self, depth, f'btype {self.tOut}')
     def __repr__(self):
-        return f"tcbtype: {self.nodepath} {self.tOut}"
-
-
-# **********************************************************************************************************************
-# foreign functions
-# **********************************************************************************************************************
-
-class tcforeignfunc(tcnode): pass       # OPEN: to think through how to describe in bones itself how a call into a foreign language
-
-class tcpyfunc(tcforeignfunc): pass     # i.e. a different use case than using @coppertop in py-bones
-
-class tccfunc(tcforeignfunc): pass
-
-class tcffunc(tcforeignfunc): pass      # fortran func
+        return f"tclitbtype: {self.nodepath} {self.tOut}"
 
 
 # **********************************************************************************************************************

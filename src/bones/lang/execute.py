@@ -9,7 +9,7 @@
 
 from coppertop.pipe import _Function, _typeOf
 from bones.lang.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, tcgetoverload, \
-    tclitstruct, tclittup, tcbtype
+    tclitstruct, tclittup, tclitbtype
 from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
 from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
@@ -144,7 +144,7 @@ class TCInterpreter:
             answer = self.k.littupCons(n.tOut, elems)
             return answer
 
-        elif isinstance(n, tcbtype):
+        elif isinstance(n, tclitbtype):
             return n.tOut
 
         elif isinstance(n, tcfunc):

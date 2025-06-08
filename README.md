@@ -279,10 +279,14 @@ e.g. N**T1{PP(T1)->str} - a seq of types that have pretty print (PP) defined \
 e.g. N**T1{area(T1)-cm2} - a seq of types that have the function area defined
 
 
+#### ABIs
+
+Bones will be able to call C ABI functions and should be able to call Fortran functions.
+
+
 ### contingent types
 the intention is to only dynamically check these - if we ever (unlikely) need pattern matching they would be used there \
 e.g. N**T1{fred&joe} - a seq of types that the predicates fred and joe return true
-
 
 
 

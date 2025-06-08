@@ -30,13 +30,13 @@ from bones.lang.lex import Token, prettyNameByTag, \
     CONTEXT_NAME, CONTEXT_ASSIGN_RIGHT, \
     GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME, ELLIPSES
 from bones.lang.parse_groups import \
-    LoadGroup, FromImportGroup, \
-    FuncOrStructGroup, TupParenOrDestructureGroup, BlockGroup, \
-    TypeLangGroup, \
-    FrameGroup, _SemiColonSepCommaSepDotSep, SemiColonSepCommaSep, _DotOrCommaSep, _CommaSepDotSep
+    LoadGp, FromImportGp, \
+    FuncOrStructGp, TupParenOrDestructureGp, BlockGp, \
+    TypelangGp, \
+    FrameGp, _SemiColonSepCommaSepDotSepGL, SemiColonSepCommaSep, _DotOrCommaSepGL, _CommaSepDotSepGL
 from bones.lang.symbol_table import VMeta, FnMeta
 from bones.lang.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
-    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tcbtype
+    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.lang.symbol_table import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE, fnSymTab, ArgCatcher, blockSymTab
 from bones.lang.types import TBI, littup
@@ -67,11 +67,11 @@ def parseTupParenOrDestructureGroup(group, st, k):
         tc = parsePhrase(phrase, st, k)
         return [tc]
     elif tt == TUPLE_0_EMPTY:
-        if isinstance(group.grid, _SemiColonSepCommaSepDotSep):
+        if isinstance(group.grid, _SemiColonSepCommaSepDotSepGL):
             commaSepDotSepPhrase = group.grid[0]
-            commaSepDotSepTc = _CommaSepDotSep()
+            commaSepDotSepTc = _CommaSepDotSepGL()
             for dotSepPhrase in commaSepDotSepPhrase:
-                dotSepTc = _DotOrCommaSep('.')
+                dotSepTc = _DotOrCommaSepGL('.')
                 for phrase in dotSepPhrase:
                     tc = parsePhrase(phrase, st, k)
                     dotSepTc << tc
@@ -79,7 +79,7 @@ def parseTupParenOrDestructureGroup(group, st, k):
             return commaSepDotSepTc
         elif isinstance(group.grid, SemiColonSepCommaSep):
             commaSepPhrase = group.grid[0]
-            dotSepTc = _DotOrCommaSep(',')
+            dotSepTc = _DotOrCommaSepGL(',')
             for phrase in commaSepPhrase:
                 tc = parsePhrase(phrase, st, k)
                 dotSepTc << tc
@@ -89,7 +89,7 @@ def parseTupParenOrDestructureGroup(group, st, k):
     elif tt == TUPLE_1_EMPTY:
         if isinstance(group.grid, SemiColonSepCommaSep):
             commaSepPhrase = group.grid[0]
-            commaSepTc = _DotOrCommaSep(',')
+            commaSepTc = _DotOrCommaSepGL(',')
             for phrase in commaSepPhrase:
                 tc = parsePhrase(phrase, st, k)
                 commaSepTc << tc
@@ -135,7 +135,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
                 return f, 1
         elif len(tokens) > 1:
             next = tokens[1]
-            if isinstance(next, TupParenOrDestructureGroup):
+            if isinstance(next, TupParenOrDestructureGp):
                 # e.g. fred(...)
                 tup = parseTupParenOrDestructureGroup(next, st, k)
                 tupleType = next.tupleType
@@ -149,13 +149,13 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
                     return tcapply(tokens[0].tok1, next.tok2, st, f, rhs), 2
                 elif tupleType == TUPLE_0_EMPTY:
                     # fn(a,b,c)
-                    if isinstance(tup, _SemiColonSepCommaSepDotSep):
+                    if isinstance(tup, _SemiColonSepCommaSepDotSepGL):
                         rhs = [snippetOrTc(e) for e in tup]
                     elif isinstance(tup, SemiColonSepCommaSep):
                         rhs = [snippetOrTc(e) for e in tup]
-                    elif isinstance(tup, _DotOrCommaSep):
+                    elif isinstance(tup, _DotOrCommaSepGL):
                         rhs = [snippetOrTc(e) for e in tup]
-                    elif isinstance(tup, _CommaSepDotSep):
+                    elif isinstance(tup, _CommaSepDotSepGL):
                         rhs = [snippetOrTc(e[0]) for e in tup]
                     else:
                         raise ProgrammerError()
@@ -187,7 +187,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
 
     elif style is unary:
         # noun unary            (unary may have tuples afterward)
-        if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGroup):
+        if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGp):
             tup = parseTupParenOrDestructureGroup(postUnaryTok, st, k.sm)
             tupleType = postUnaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -215,7 +215,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
         # noun binary arg2          (binary and arg2 may have tuples afterward)
         if len(tokens) < 2: raise SentenceError("incomplete phrase - {noun, binary} is missing args after the binary")
         postBinaryTok = tokens[1]
-        if isinstance(postBinaryTok, TupParenOrDestructureGroup):
+        if isinstance(postBinaryTok, TupParenOrDestructureGp):
             tup = parseTupParenOrDestructureGroup(postBinaryTok, st, k.sm)
             tupleType = postBinaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -246,7 +246,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
 
         # handle token after ternary
         tok = tokens[i]
-        if isinstance(tok, TupParenOrDestructureGroup):
+        if isinstance(tok, TupParenOrDestructureGp):
             tup = parseTupParenOrDestructureGroup(tok, st, k.sm)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -266,7 +266,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, st, tokens, k):
 
         # handle token after arg2
         tok = tokens[i]
-        if isinstance(tok, TupParenOrDestructureGroup):
+        if isinstance(tok, TupParenOrDestructureGp):
             tup = parseTupParenOrDestructureGroup(tok, st, k.sm)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -366,7 +366,7 @@ def parsePhrase(tokens, st, k):
                         raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
                     tcnode, numConsumed = buildFnApplication(tcnode, meta.st, name, st, tokens, k)
                     tokens >> numConsumed
-                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGroup) and name in st.argCatcher.inferredArgnames:
+                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGp) and name in st.argCatcher.inferredArgnames:
                     if accessors:
                         raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
@@ -493,7 +493,7 @@ def parsePhrase(tokens, st, k):
 
         else:
 
-            if isinstance(t, FuncOrStructGroup):
+            if isinstance(t, FuncOrStructGp):
                 if t._unaryBinaryOrStruct == STRUCT:
                     # create the tclitstruct and the struct type
                     vs, names, ts = [], [], []
@@ -533,16 +533,16 @@ def parsePhrase(tokens, st, k):
                     tcnode, numConsumed = buildFnApplication(tcnode, Missing, f, st, tokens[0:], k.sm)
                     tokens >> numConsumed
 
-            elif isinstance(t, TupParenOrDestructureGroup):
+            elif isinstance(t, TupParenOrDestructureGp):
                 if tcnode is Missing:
                     if t.tupleType == DESTRUCTURE:
-                        raise NotYetImplemented('TupParenOrDestructureGroup.tupleType == DESTRUCTURE')
+                        raise NotYetImplemented('TupParenOrDestructureGp.tupleType == DESTRUCTURE')
                     if t.tupleType == TUPLE_OR_PAREN:
                         # if TUPLE_OR_PAREN then of form `(a)` - is it a tuple of one element or a parenthesis?
                         # for the moment we will assume a parenthesis -> 1 entup to make a one tuple? like q
                         pass
                     if t.tupleType == TUPLE_2D:
-                        raise NotYetImplemented('TupParenOrDestructureGroup.tupleType == TUPLE_2D')
+                        raise NotYetImplemented('TupParenOrDestructureGp.tupleType == TUPLE_2D')
                     else:
                         vs, ts = [], []
                         innertcnodes = parseTupParenOrDestructureGroup(t, st, k)
@@ -578,7 +578,7 @@ def parsePhrase(tokens, st, k):
                     else:
                         raise ProgrammerError()
 
-            elif isinstance(t, BlockGroup):
+            elif isinstance(t, BlockGp):
                 blockSt = blockSymTab(st)
                 if t._params is Missing:
                     argnames, tArgs = [], []
@@ -591,10 +591,10 @@ def parsePhrase(tokens, st, k):
                 tokens[0] = tcnode
                 tokens >> 1
 
-            elif isinstance(t, FrameGroup):
+            elif isinstance(t, FrameGp):
                 raise NotYetImplemented()
 
-            elif isinstance(t, LoadGroup):
+            elif isinstance(t, LoadGp):
                 # i.e. searches PYTHON_PATH and BONES_PATH for bones/ex/ and load core.py or core.b
                 paths = []
                 for phrase in t.phrases:
@@ -604,7 +604,7 @@ def parsePhrase(tokens, st, k):
                 k.loadModules(tcnode.paths)
                 tokens >> 1
 
-            elif isinstance(t, FromImportGroup):
+            elif isinstance(t, FromImportGp):
                 names = []
                 for phr in t.phrases:
                     name = ''
@@ -623,8 +623,8 @@ def parsePhrase(tokens, st, k):
                 k.importSymbols(tcnode.path, tcnode.names, tcnode.st)
                 tokens >> 1
 
-            elif isinstance(t, TypeLangGroup):
-                tcnode = tcbtype(t.tok1, t.tok2, st, BType(t.tl))
+            elif isinstance(t, TypelangGp):
+                tcnode = tclitbtype(t.tok1, t.tok2, st, BType(t.tl))
                 tokens >> 1
 
             else:
