@@ -12,7 +12,6 @@ from bones.core.sentinels import Missing, Void
 from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError, NotYetImplemented
 from bones.kernel.base import BaseKernel
 from bones.lang import parse_phrase, parse_groups, lex
-from bones.lang.infer import Simplifier, visit, InferenceLogger
 from bones.lang.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Dispatcher
@@ -91,6 +90,7 @@ class BonesKernel(BaseKernel):
 
         analyse = False if context.analyse is Missing else context.analyse
         if analyse:
+            from bones.lang.infer import Simplifier, visit, InferenceLogger
             with context(actions=[], kernel=self, tt=(InferenceLogger(log=False) if context.tt is Missing else context.tt), infercache=self.infercache):
                 for i, n in enumerate(snippetTc.nodes):
                     linenum = i + 1
