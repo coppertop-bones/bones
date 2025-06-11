@@ -12,7 +12,7 @@ For documentation for how to use bones - see https://github.com/coppertop-bones/
 To install the python version of bones
 
 ```
-pip install coppertop-bones
+pip install bones-lang
 ```
 
 <br>
