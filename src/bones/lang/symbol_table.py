@@ -12,12 +12,12 @@ from collections import namedtuple
 from bones import jones
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
-from coppertop.pipe import _Function, _Dispatcher
+from coppertop.pipe import _Family
 from bones.core.errors import ScopeError
 from bones.lang.core import MAX_NUM_ARGS
-from bones.lang.types import TBI
+from bones.lang.types import TBI, _tvfunc
 from bones.lang.tc import tcfunc
-from bones.ts.metatypes import BTUnion, BTFn, BTOverload
+from bones.ts.metatypes import BTUnion, BTFn, BTFamily
 from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 
 # SymTab
@@ -65,31 +65,6 @@ _anonSeed = itertools.count(start=1)
 
 PYCHARM = False
 
-def tOverload(): pass
-
-
-# Overload and Family are for managing collections of functions - we can optimise later, and these should be
-# integrated with the dispatchers in the piping
-
-class Family:
-    __slots__ = ['name', 'overloads', '_t_']
-
-    def __init__(self, name, overloads):
-        self.name = name
-        self.overloads = overloads
-        self._t_ = Missing
-
-    @property
-    def _t(self):
-        if self._t_ is Missing or PYCHARM:
-            tFns = []
-            for ov in self.overloads:
-                if ov is not Missing:
-                    for sig, fn in ov._fnBySig.items():
-                        tFns.append(fn._t)
-            self._t_ = BTOverload(*tFns)
-        return self._t_
-
 
 class Overload:
     # holds a collection of functions for a given name and number of args
@@ -107,7 +82,7 @@ class Overload:
     @property
     def _t(self):
         if self._t_ is Missing:
-            self._t_ = BTOverload(*[fn._t for fn in self._fnBySig.values()])
+            self._t_ = BTFamily(*[fn._t for fn in self._fnBySig.values()])
         return self._t_
 
     def __setitem__(self, sig, fn):
@@ -367,7 +342,7 @@ class SymTab:
 
     def bindFn(self, name, fn):
         if not self.hasF(name): raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, tcfunc)) and fn != TBI: raise ProgrammerError()
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, _Family, tcfunc)) and fn != TBI: raise ProgrammerError()
         if self._globalSymTab is Missing: raise ScopeError("Missing global scope")
         if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         numargs = fn.numargs

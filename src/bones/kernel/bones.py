@@ -14,7 +14,7 @@ from bones.kernel.base import BaseKernel
 from bones.lang import parse_phrase, parse_groups, lex
 from bones.lang.tc import TcReport
 from bones.core.context import context
-from coppertop.pipe import _Dispatcher
+from coppertop.pipe import _Family
 import coppertop.dm.pp
 from coppertop.dm.pp import PP
 from bones.lang.core import LOCAL_SCOPE
@@ -184,8 +184,8 @@ class BonesKernel(BaseKernel):
                         st.defTMeta(name, importee)
             elif isinstance(importee, jones._fn):
                 st.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
-                if isinstance(importee.d, _Dispatcher):
-                    for fnBySig in importee.d.fnBySigByNumArgs:
+                if isinstance(importee.d, _Family):
+                    for fnBySig in importee.d._fnBySigByNumArgs:
                         for d in fnBySig.values():
                             style = d.style
                             currentStyle = self.styleByName.setdefault(name, style)

@@ -7,9 +7,9 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-from coppertop.pipe import _Function, _typeOf
-from bones.lang.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, tcgetoverload, \
-    tclitstruct, tclittup, tclitbtype
+from bones.lang.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
+    tcgetoverload, tclitstruct, tclittup, tclitbtype
+from bones.lang.types import _tvfunc
 from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
 from bones.lang.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
@@ -17,7 +17,7 @@ from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
-from bones.ts.select import selectFunction
+from bones.ts.select import selectFunction, _typeOf
 import bones.lang.tc
 
 # implements stepping and pure execution interfaces
@@ -73,11 +73,11 @@ class TCInterpreter:
             if isinstance(fn, tcfunc):
                 return fn(*args)
 
-            elif isinstance(fn, _Function):
+            elif isinstance(fn, _tvfunc):
                 if fn.pass_tByT:
-                    ret = fn.pyfn(*args, tByT=schemaVars)
+                    ret = fn._v(*args, tByT=schemaVars)
                 else:
-                    ret = fn.pyfn(*args)
+                    ret = fn._v(*args)
                 if hasattr(ret, '_t'):
                     if ret._t:
                         # check the actual return type fits the declared return type
@@ -154,8 +154,9 @@ class TCInterpreter:
             # unlikely but we could potentially right bind a fn and call it immediately
             # val = self.ex(n.fnode)
             f = n.fnode
-            self.sm.bind(n.st, n.scope, n.name, f)
-            return f
+            fnMeta = n.st.fMetaForGet(n.name, n.scope)
+            # merge functoins here  - check is coce if htey havnen't alread been merged
+            return fnMeta.st.getO
 
         elif isinstance(n, tcload):
             # only needed to be done at parse time

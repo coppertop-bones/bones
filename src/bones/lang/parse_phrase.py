@@ -417,7 +417,7 @@ def parsePhrase(tokens, st, k):
                     # if meta is not Missing:
                     #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
                     # more may need to happen here - e.g. check for style tag
-                    st.defFnMeta(name, TBI, LOCAL_SCOPE)   # create a slot in the symtab for the fn
+                    st.defFnMeta(name, tcfunc.tRet, LOCAL_SCOPE)   # create a slot in the symtab for the fn
                     st.bindFn(name, tcnode)       # add it to the overloads (it will be queued if it needs inferring)
                     currentStyle = k.styleByName.setdefault(name, tcnode.literalstyle)
                     if tcnode.literalstyle != currentStyle:
@@ -517,7 +517,8 @@ def parsePhrase(tokens, st, k):
                         fnSt.argCatcher = ArgCatcher([])
                     else:
                         argnames, tArgs = parseParameters(t._params, fnSt, k.sm)
-                    tRet = TBI if t._tRet is Missing else parseTypeLang(t._tRet, k)
+                    # {[] <:tRet> x + y...
+                    tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
                     body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
                     if t._params is Missing:
                         argnames = fnSt.argCatcher.inferredArgnames

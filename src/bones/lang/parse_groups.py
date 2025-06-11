@@ -978,11 +978,10 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, st)
                         st.defFnMeta(varName, TBI, LOCAL_SCOPE)
                     elif isinstance(group, FrameGp):
-                        print(f'_processAssigmentsInPhrase<FrameGp>: {group}')
-                        raise NotYetImplemented()
+                        print()
+                        raise NotYetImplemented(f'_processAssigmentsInPhrase<FrameGp>: {group}')
                     elif isinstance(prior, type):
-                        print(f'_processAssigmentsInPhrase<type>: {group}')
-                        raise NotYetImplemented()
+                        raise NotYetImplemented(f'_processAssigmentsInPhrase<type>: {group}')
                     else:
                         # b: {{x + y}}
                         # a: b <:unary>     <<<< here a is being bound to as a unary function but we have no idea
@@ -1011,6 +1010,8 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                     else:
                         st.defVMeta(varName, TBI, GLOBAL_SCOPE)
                     st.defVMeta(varName, TBI, GLOBAL_SCOPE)
+            except NotYetImplemented as ex:
+                raise
             except Exception as ex:
                 raise GroupError(f"l1: {repr(group)} l2: {group.l2}", ErrSite("_processAssigmentsInPhrase #7"), group, tokenOrGroup) from ex
         elif isinstance(each, TupParenOrDestructureGp) and each._isDestructure:
@@ -1098,6 +1099,9 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
         self._finishCommaSection(token)
         self._finishRow()
         self._finalise(token)
+        if self._phrases and self._phrases[0] and self._phrases[0] and isinstance(self._phrases[0][0][0], TypelangGp):
+            self._tRet = self._phrases[0][0]
+            self._phrases[0].pop(0)
     @property
     def PPGroup(self):
         pps = self.grid.PPGroup
@@ -1307,6 +1311,9 @@ class FuncOrStructGp(_Phrases):
         if self._unaryBinaryOrStruct == UNARY_OR_STRUCT:
             raise ProgrammerError()
         super()._finalise(tokenOrGroup)
+        if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGp):
+            self._tRet = self._phrases[0][0]
+            self._phrases.pop(0)
 
     @property
     def PPGroup(self):
