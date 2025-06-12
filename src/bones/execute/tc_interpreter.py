@@ -7,18 +7,18 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-from bones.lang.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
+from bones.kernel.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
     tcgetoverload, tclitstruct, tclittup, tclitbtype
 from bones.lang.types import _tvfunc
-from bones.lang.core import LOCAL_SCOPE, RET_VAR_NAME, MODULE_SCOPE
-from bones.lang.symbol_table import Overload
+from bones.kernel.core import MODULE_SCOPE
+from bones.kernel.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
 from bones.ts.select import selectFunction, _typeOf
-import bones.lang.tc
+import bones.kernel.tc
 
 # implements stepping and pure execution interfaces
 
@@ -43,28 +43,29 @@ class TCInterpreter:
         self.sm = kernel.sm
 
     def executeTc(self, snippet):
-        bones.lang.tc.k = self.k
+        bones.kernel.tc.k = self.k
         for i, n in enumerate(snippet.nodes):
             # context.tt  << i + 1
             answer = self.ex(n)
             if answer == None: answer = Void
-        bones.lang.tc.k = Missing
+        bones.kernel.tc.k = Missing
         return answer
 
     def ex(self, n):
+        # print(f'Executing node: {n}')
 
         if isinstance(n, tcapply):
             # context.tt << f'tcapply {n}'
             sm = self.sm
             numargs = len(n.argnodes)
-            ov = sm.getOverload(n.st, n.fnnode.scope, n.fnnode.name, numargs)
+            ov = sm.getOverload(n.symtab, n.fnnode.scope, n.fnnode.name, numargs)
             args = [self.ex(argnode) for argnode in n.argnodes]
             if isinstance(ov, list):
                 # the list thing needs sorting out
                 ov = ov[numargs]
             if isinstance(ov, Overload):
                 sig = BTTuple(*(_typeOf(a) for a in args) )
-                fn, schemaVars, distance, argDistances = selectFunction(sig, ov._fnBySig, py, n.fnnode.name, lambda :sm.getFamily(n.st, n.fnnode.scope, n.fnnode.name, numargs))
+                fn, schemaVars, distance, argDistances = selectFunction(sig, ov._fnBySig, py, n.fnnode.name, lambda :sm.getFamily(n.symtab, n.fnnode.scope, n.fnnode.name, numargs))
             elif isinstance(ov, tcfunc):
                 fn = ov
             else:
@@ -93,7 +94,7 @@ class TCInterpreter:
                     if fitsWithin(_typeOf(ret), fn.tRet):
                         return ret
                     else:
-                        return ret | fn.tRet
+                        return ret #| fn.tRet
 
             else:
                 raise ProgrammerError(f"Unhandled  fn {{{type(fn)}}}")
@@ -104,12 +105,12 @@ class TCInterpreter:
                 raise NotYetImplemented()
             else:
                 val = self.ex(n.vnode)
-                self.sm.bind(n.st, n.scope, n.name, val)
+                self.sm.bind(n.symtab, n.scope, n.name, val)
                 return val
 
         elif isinstance(n, tcgetval):
             # context.tt << f'tcgetval {n}'
-            v = self.sm.getValue(n.st, n.scope, n.name)
+            v = self.sm.getValue(n.symtab, n.scope, n.name)
             v = getattr(v, '_tv', Missing) or v                       # in case it is a boxed value
             for accessor in n.accessors:
                 # OPEN: still a mess
@@ -121,13 +122,13 @@ class TCInterpreter:
             return v
 
         # elif isinstance(n, tcgetoverload):
-        #     fnMeta = n.st.fMetaForGet(n.name, n.scope)
-        #     return fnMeta.st.getOverload(n.name, n.numargs)
+        #     fnMeta = n.symtab.fMetaForGet(n.name, n.scope)
+        #     return fnMeta.symtab.getOverload(n.name, n.numargs)
 
         elif isinstance(n, tcgetfamily):
             # context.tt << f'tcgetfamily {n}'
-            fnMeta = n.st.fMetaForGet(n.name, n.scope)
-            return fnMeta.st.getOverloadFamily(n.name)
+            fnMeta = n.symtab.fMetaForGet(n.name, n.scope)
+            return fnMeta.symtab.getFamily(n.name)
 
         elif isinstance(n, tclit):
             return n.tv
@@ -151,12 +152,8 @@ class TCInterpreter:
             return n
 
         elif isinstance(n, tcbindfn):
-            # unlikely but we could potentially right bind a fn and call it immediately
-            # val = self.ex(n.fnode)
-            f = n.fnode
-            fnMeta = n.st.fMetaForGet(n.name, n.scope)
-            # merge functoins here  - check is coce if htey havnen't alread been merged
-            return fnMeta.st.getO
+            # only needed to be done at parse time
+            pass
 
         elif isinstance(n, tcload):
             # only needed to be done at parse time
@@ -164,9 +161,9 @@ class TCInterpreter:
 
         elif isinstance(n, tcfromimport):
             # symbols, type holders and functions are gotten at parse time, but values must be loaded at execution time
-            nvs = self.k.importValues(n.path, n.names, n.st)
+            nvs = self.k.importValues(n.path, n.names, n.symtab)
             for name, v in nvs.items():
-                self.sm.bind(n.st, MODULE_SCOPE, name, v)
+                self.sm.bind(n.symtab, MODULE_SCOPE, name, v)
 
         else:
             raise NotYetImplemented(f"Unhandled node {{{n}}}")

@@ -10,7 +10,7 @@
 import builtins
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
-from bones.lang.core import LOCAL_SCOPE
+from bones.kernel.core import LOCAL_SCOPE
 from bones.lang.types import litnum, litint, litsym, litsyms, littxt, litdate
 from bones.kernel.sym import SymManager
 
@@ -69,9 +69,9 @@ class PythonStorageManager:
     def newTable(self):
         raise NotYetImplemented()
 
-    def framesForSymTab(self, st):
-        if (frame := self.framesBySymTab.get(st, Missing)) is Missing:
-            self.framesBySymTab[st] = frame = bframe(st, Missing)
+    def framesForSymTab(self, symtab):
+        if (frame := self.framesBySymTab.get(symtab, Missing)) is Missing:
+            self.framesBySymTab[symtab] = frame = bframe(symtab, Missing)
         return frame
 
     def pushFrame(self, fnst):
@@ -85,58 +85,58 @@ class PythonStorageManager:
     def popFrame(self):
         self.stack = self.stack[:-1]
 
-    def bind(self, st, scope, name, value):
+    def bind(self, symtab, scope, name, value):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(st)
+            frame = self.framesForSymTab(symtab)
         frame[name] = value
 
-    def getValue(self, st, scope, name):
+    def getValue(self, symtab, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(st)
+            frame = self.framesForSymTab(symtab)
         return frame[name]
 
-    def getReturn(self, st, scope, name):
+    def getReturn(self, symtab, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(st)
+            frame = self.framesForSymTab(symtab)
         return frame.values.get(name, Missing)
 
-    def getOverload(self, st, scope, name, numargs):
+    def getOverload(self, symtab, scope, name, numargs):
         # check local frame first (as the function may have been passed as an argument)
         if scope == LOCAL_SCOPE:
-            frame = self.stack[-1] if self.stack else self.framesForSymTab(st)
+            frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
         else:
             raise NotImplementedError()
         if (ov := frame.values.get(name, Missing)) is Missing:
-            # do the usual st search
-            fnMeta = st.fMetaForGet(name, scope)   # get the meta using just the name
-            ov = fnMeta.st.getOverload(name, numargs)  # get the fn using the name and number of args
+            # do the usual symtab search
+            fnMeta = symtab.fMetaForGet(name, scope)   # get the meta using just the name
+            ov = fnMeta.symtab.getOverload(name, numargs)  # get the fn using the name and number of args
             if ov is Missing: raise ProgrammerError()
         return ov
 
-    def getFamily(self, st, scope, name):
+    def getFamily(self, symtab, scope, name):
         # check local frame first (as the function may have been passed as an argument)
         if scope == LOCAL_SCOPE:
-            frame = self.stack[-1] if self.stack else self.framesForSymTab(st)
+            frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
         else:
             raise NotImplementedError()
         if (ov := frame.values.get(name, Missing)) is Missing:
-            # do the usual st search
-            fnMeta = st.fMetaForGet(name, scope)   # get the meta using just the name
-            ov = fnMeta.st.getOverload(name, numargs)  # get the fn using the name and number of args
+            # do the usual symtab search
+            fnMeta = symtab.fMetaForGet(name, scope)   # get the meta using just the name
+            ov = fnMeta.symtab.getOverload(name, numargs)  # get the fn using the name and number of args
             if ov is Missing: raise ProgrammerError()
         return ov
 
 
 
 class bframe:
-    def __init__(self, st, parent):
-        self.st = st
+    def __init__(self, symtab, parent):
+        self.symtab = symtab
         self.parent = parent
         self.values = {}
     def __setitem__(self, key, value):
@@ -149,7 +149,7 @@ class bframe:
     def depth(self):
         return self.parent.depth + 1 if self.parent else 1
     def __repr__(self):
-        return f'bframe: [{self.depth}]{self.st.path}'
+        return f'bframe: [{self.depth}]{self.symtab.path}'
 
 
 

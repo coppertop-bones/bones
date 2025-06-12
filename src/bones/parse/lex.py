@@ -621,6 +621,6 @@ def lexBonesSrc(srcId, src):
 
 
 handlersByErrSiteId.update({
-    ('bones.lang.lex', Missing, 'lexBonesSrc', 'illegal tag') : '...',
-    ('bones.lang.lex', Missing, 'lexBonesSrc', 'no match') : '...',
+    ('bones.parse.lex', Missing, 'lexBonesSrc', 'illegal tag') : '...',
+    ('bones.parse.lex', Missing, 'lexBonesSrc', 'no match') : '...',
 })

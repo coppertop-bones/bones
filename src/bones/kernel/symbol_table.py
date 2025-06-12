@@ -14,26 +14,27 @@ from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from coppertop.pipe import _Family
 from bones.core.errors import ScopeError
-from bones.lang.core import MAX_NUM_ARGS
 from bones.lang.types import TBI, _tvfunc
-from bones.lang.tc import tcfunc
+from bones.kernel.tc import tcfunc
 from bones.ts.metatypes import BTUnion, BTFn, BTFamily
-from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
+from bones.kernel.core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
-# SymTab
+
+
+# SymbolTable
 #   holds all information for symbols
 #   holds the actual callable functions defined in it
 #   (values are stored by the storage manager)
-#   contexts can see other contexts - e.g. the global, module, context scope context and lexicalParent
+#   symbol tables can see other symbol tables - e.g. the global, module, contextual scope and lexicalParent
 #
-# scoping rules determine how the context that defines a name is discovered - thus are behaviours not objects
-#   types are only used inside <:..> etc and are stored in the global context (the plan is to add type namespaces)
+# scoping rules determine how the symbol table that defines a name is discovered - thus are behaviours not objects
+#   types are only used inside <:..> etc and are stored in the global symbol table (the plan is to add type namespaces)
 #   value scopes don't inherit - can access immediate parent with .fred and module with ..CONST
 #   function scopes inherit from their lexical parent all the way up to module
-#   functions are not allowed in global context
+#   functions are not allowed in global symbol table
 #
 # pipeline styles are kept globally in the kernel - so we know the set of function names, however we can have a local 
-# name that refers to a value - so before accessing a name we ask for which context is in and it's type
+# name that refers to a value - so before accessing a name we ask for which symbol table is in and it's type
 #
 # consider
 # {f(x)} - parser figures f is a function and can update the symtab accordingly, x is very ambiguous
@@ -48,6 +49,10 @@ from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCO
 # so before querying a name we need it's meta - what is it and which symtab does it belong to
 
 
+# OPEN:
+#  - function selection cache invalidation and refresh and reanalysis and recompilation of affected code
+
+
 
 def ppScope(scope):
     if scope == LOCAL_SCOPE: return 'local'
@@ -56,14 +61,24 @@ def ppScope(scope):
     if scope == CONTEXT_SCOPE: return 'contextual'
     if scope == GLOBAL_SCOPE: return 'global'
 
-VMeta = namedtuple('VMeta', ['t', 'st'])
-FnMeta = namedtuple('FnMeta', ['t', 'st'])         # actual type schemas are kept in the overloads
-TMeta = namedtuple('TMeta', ['t', 'st'])
 
 _anonSeed = itertools.count(start=1)
 
 
 PYCHARM = False
+
+
+class _Meta:
+    __slots__ = ['t', 'symtab']
+    def __init__(self, t, symtab):
+        self.t = t
+        self.symtab = symtab
+    def __repr__(self):
+        return f'{self.__class__.__name__}<t={self.t},symtab={self.symtab}>'
+
+class VMeta(_Meta): pass
+class FnMeta(_Meta): pass
+class TMeta(_Meta): pass
 
 
 class Overload:
@@ -136,7 +151,7 @@ class Overload:
 
 
 
-class SymTab:
+class SymbolTable:
 
     __slots__ = [
         'name', 'kernel',
@@ -355,13 +370,13 @@ class SymTab:
         # MUSTDO merge the new ones with the old ones
         return self._newOverloadsByNumArgs[numargs][name]
 
-    def getOverloadFamily(self, name):
+    def getFamily(self, name):
         ovs = [Missing for i in range(MAX_NUM_ARGS + 1)]
         for i, m in enumerate(self._newOverloadsByNumArgs):
             # MUSTDO merge the new ones with the old ones
             if (ov := m.get(name, Missing)) is not Missing:
                 ovs[i] = ov
-        return Family(name, ovs)
+        return _Family(*ovs)
 
     @property
     def path(self):
@@ -373,7 +388,7 @@ class SymTab:
         return self.name if answer == '' else answer + '.' + self.name
 
     def __repr__(self):
-        return f'SymTab<{self.path}>'
+        return f'SymbolTable<{self.path}>'
 
     def updateMetaType(self, name, currentMeta, t):
         if isinstance(currentMeta, VMeta):
@@ -403,7 +418,7 @@ class SymTab:
 def fnSymTab(lexicalParentSt):
     if lexicalParentSt._globalSymTab is Missing:
         raise ProgrammerError()
-    return SymTab(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
+    return SymbolTable(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
 
 def blockSymTab(lexicalParentSt):
     # OPEN: implement properly - args are local all others are shared

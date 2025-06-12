@@ -11,9 +11,9 @@ from bones.core.sentinels import Missing
 
 class Sym:
     __slots__ = ['_id', '_st']
-    def __init__(self, id, st):
+    def __init__(self, id, symtab):
         self._id = id
-        self._st = st
+        self._st = symtab
     def __repr__(self):
         return '`%s'%(self._st._strings[self._id])
     def __str__(self):

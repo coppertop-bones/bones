@@ -1,5 +1,3 @@
 __pycache__/
-
-docs/.DS_Store
-
-src/bones/lang/_type_lang/.DS_Store
+.DS_Store
+.DS_Store/

@@ -22,11 +22,11 @@ which also makes it possible to compile optimised machine-code, potentially on t
 
 PACE - PARSE
 Parsing is done in three steps:
-1. source code is lexed into tokens (which point back to their source) - see bones.lang.lex
-2. tokens are split into groups of phrases and symbol table entries created - see bones.lang.parse_groups
+1. source code is lexed into tokens (which point back to their source) - see bones.parse.lex
+2. tokens are split into groups of phrases and symbol table entries created - see bones.parse.parse_groups
 3. each phrase is parsed, in such a way that function styles (i.e. unary, binary, etc) are determined before use, and
    combined with other phrases and groups into tree-code nodes, updating the symbol table as necessary - see
-   bones.lang.parse_phrases
+   bones.parse.parse_phrases
 
 PACE - ANALYSE
 The tree-code can be analysed to ensure type correctness and minimise the dispatch matrix at each function application.

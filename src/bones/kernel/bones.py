@@ -10,30 +10,33 @@
 import itertools, sys, collections
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError, NotYetImplemented
-from bones.kernel.base import BaseKernel
-from bones.lang import parse_phrase, parse_groups, lex
-from bones.lang.tc import TcReport
+from bones.parse import parse_phrase, parse_groups
+from bones.parse import lex
+from bones.kernel.tc import TcReport
 from bones.core.context import context
 from coppertop.pipe import _Family
-import coppertop.dm.pp
 from coppertop.dm.pp import PP
-from bones.lang.core import LOCAL_SCOPE
+from bones.kernel.core import LOCAL_SCOPE
 from bones.ts.metatypes import BType
+from bones.lang.types import unary
 from bones import jones
 
 
 pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 
 
-class BonesKernel(BaseKernel):
+class BonesKernel:
 
     __slots__ = [
-        'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner', 'scratch', 'litdateCons', 'litsymCons',
-        'littupCons', 'litstructCons', 'litframeCons'
+        'ctxs', 'sm', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner',
+        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons'
     ]
 
     def __init__(self, sm, *, litdateCons, litsymCons, littupCons, litstructCons, litframeCons):
-        super().__init__(sm)
+        self.ctxs = {}
+        self.sm = sm
+        self.modByPath = {}
+        self.styleByName = {}
         self.srcById = {}
         self.linesById = {}
         self.nextSrcId = itertools.count(start=1)
@@ -46,6 +49,9 @@ class BonesKernel(BaseKernel):
         self.litframeCons = litframeCons
         self.tcrunner = Missing
         self.scratch = Missing
+
+    def styleForName(self, name):
+        return self.styleByName.get(name, unary)
 
     def dumpLines(self, srcId, l1, l2):
         l1 = max(l1, 1)
@@ -102,7 +108,7 @@ class BonesKernel(BaseKernel):
                             with context(tt=context.tt.newLevel()):
                                 s = Simplifier(context.newVars)
                                 # s.trySimplifyAll()      # we have a simple return type but there may be vars underneath that haven't been similified
-                                typesReport.append((n, st:=s.trySimplify(t)))
+                                typesReport.append((n, s.trySimplify(t)))
                             allVars.extend(context.newVars)
                     except GrammarError as ex:
                         grammarError = ex
@@ -123,7 +129,7 @@ class BonesKernel(BaseKernel):
         # compile
 
 
-        # run
+        # execute
         run = True if context.run is Missing else context.run
         if run and not grammarError:
             answer = self.tcrunner.executeTc(snippetTc)
@@ -151,7 +157,7 @@ class BonesKernel(BaseKernel):
 
 
 
-    def importSymbols(self, path, names, st):
+    def importSymbols(self, path, names, symtab):
         if (mod := self.modByPath.get(path, Missing)) is Missing:
             raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
         for name in names:
@@ -169,11 +175,11 @@ class BonesKernel(BaseKernel):
                 if importee is Missing:
                     raise ImportError(f"Can't find '{name}' in {path}", ErrSite("Can't find name"))
             if isinstance(importee, BType):
-                if st.hasT(name):
+                if symtab.hasT(name):
                     # OPEN: check that it's the same type else we need type namespaces implementing to handle this
                     pass
                 else:
-                    current = st.tMetaForGet(name)
+                    current = symtab.tMetaForGet(name)
                     if current is not Missing:
                         if importee is not current:
                             raise ImportError(f"Trying to import '{name}'({importee}) but it is already defined as {current}")
@@ -181,35 +187,35 @@ class BonesKernel(BaseKernel):
                             # already imported so nothing to do
                             pass
                     else:
-                        st.defTMeta(name, importee)
+                        symtab.defTMeta(name, importee)
             elif isinstance(importee, jones._fn):
-                st.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
+                symtab.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
                 if isinstance(importee.d, _Family):
                     for fnBySig in importee.d._fnBySigByNumArgs:
                         for d in fnBySig.values():
                             style = d.style
                             currentStyle = self.styleByName.setdefault(name, style)
                             if style != currentStyle: raise ImportError("oh dear")
-                            st.bindFn(name, d)
+                            symtab.bindFn(name, d)
                 else:
                     style = importee.d.style
                     currentStyle = self.styleByName.setdefault(name, style)
                     if style != currentStyle: raise ImportError("oh dear")
-                    st.bindFn(name, importee.d)
+                    symtab.bindFn(name, importee.d)
 
             elif hasattr(importee, "_t"):
 
-                if st.hasV(name):
+                if symtab.hasV(name):
                     # for the moment only import new names handle overloading later
                     pass
                 else:
-                    st.defVMeta(name, importee._t, LOCAL_SCOPE)
+                    symtab.defVMeta(name, importee._t, LOCAL_SCOPE)
             else:
                 raise ProgrammerError()
 
 
 
-    def importValues(self, path, names, st):
+    def importValues(self, path, names, symtab):
         nvs = {}
         if (mod := self.modByPath.get(path, Missing)) is Missing:
             raise ImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
@@ -233,7 +239,7 @@ class BonesKernel(BaseKernel):
 
             elif hasattr(importee, "_t"):
                 # imports can only be done at module level, i.e. LOCAL_SCOPE
-                st.defVMeta(name, importee._t, LOCAL_SCOPE)
+                symtab.defVMeta(name, importee._t, LOCAL_SCOPE)
                 nvs[name] = importee
 
             else:
