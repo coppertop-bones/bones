@@ -17,7 +17,7 @@ from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.utils import firstValue
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
-from bones.ts.select import selectFunction, _typeOf
+from bones.ts.select import _typeOf
 import bones.kernel.tc
 
 # implements stepping and pure execution interfaces
@@ -64,8 +64,7 @@ class TCInterpreter:
                 # the list thing needs sorting out
                 ov = ov[numargs]
             if isinstance(ov, Overload):
-                sig = BTTuple(*(_typeOf(a) for a in args) )
-                fn, schemaVars, distance, argDistances = selectFunction(sig, ov._fnBySig, py, n.fnnode.name, lambda :sm.getFamily(n.symtab, n.fnnode.scope, n.fnnode.name, numargs))
+                fn, schemaVars, distance = ov.selectFunction(*[_typeOf(arg) for arg in args])
             elif isinstance(ov, tcfunc):
                 fn = ov
             else:

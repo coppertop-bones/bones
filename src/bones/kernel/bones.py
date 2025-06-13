@@ -10,12 +10,12 @@
 import itertools, sys, collections
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import GrammarError, ProgrammerError, handlersByErrSiteId, ErrSite, ImportError, NotYetImplemented
-from bones.parse import parse_phrase, parse_groups
-from bones.parse import lex
-from bones.kernel.tc import TcReport
 from bones.core.context import context
-from coppertop.pipe import _Family
+from bones.parse import lex
+from bones.parse import parse_phrase, parse_groups
+from bones.kernel.tc import TcReport
 from coppertop.dm.pp import PP
+from bones.ts.select import Family
 from bones.kernel.core import LOCAL_SCOPE
 from bones.ts.metatypes import BType
 from bones.lang.types import unary
@@ -28,20 +28,19 @@ pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 class BonesKernel:
 
     __slots__ = [
-        'ctxs', 'sm', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner',
+        'sm', 'ctxs', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner',
         'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons'
     ]
 
     def __init__(self, sm, *, litdateCons, litsymCons, littupCons, litstructCons, litframeCons):
-        self.ctxs = {}
         self.sm = sm
+        self.ctxs = {}
         self.modByPath = {}
         self.styleByName = {}
         self.srcById = {}
         self.linesById = {}
         self.nextSrcId = itertools.count(start=1)
         self.infercache = set()
-        self.sm = sm
         self.litdateCons = litdateCons
         self.litsymCons = litsymCons
         self.littupCons = littupCons
@@ -190,13 +189,13 @@ class BonesKernel:
                         symtab.defTMeta(name, importee)
             elif isinstance(importee, jones._fn):
                 symtab.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
-                if isinstance(importee.d, _Family):
-                    for fnBySig in importee.d._fnBySigByNumArgs:
-                        for d in fnBySig.values():
-                            style = d.style
+                if isinstance(importee.d, Family):
+                    for overload in importee.d._overloadByNumArgs:
+                        for _, tvfunc in overload.items():
+                            style = tvfunc.style
                             currentStyle = self.styleByName.setdefault(name, style)
                             if style != currentStyle: raise ImportError("oh dear")
-                            symtab.bindFn(name, d)
+                            symtab.bindFn(name, tvfunc)
                 else:
                     style = importee.d.style
                     currentStyle = self.styleByName.setdefault(name, style)

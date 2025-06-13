@@ -18,6 +18,7 @@ from coppertop.pipe import nullary, unary, binary, ternary
 from bones.core.errors import ProgrammerError, NotYetImplemented, PathNotTested, SentenceError, ErrSite, \
     DictionaryError
 from bones.core.sentinels import Missing, Null
+from bones.core.context import context
 from bones.kernel.core import RET_VAR_NAME
 from bones.parse.lex import Token, prettyNameByTag, \
     START, NULL, INTEGER, DECIMAL, SYM, SYMS, TEXT, \
@@ -34,7 +35,7 @@ from bones.parse.parse_groups import \
     FuncOrStructGp, TupParenOrDestructureGp, BlockGp, \
     TypelangGp, \
     FrameGp, _SemiColonSepCommaSepDotSepGL, SemiColonSepCommaSep, _DotOrCommaSepGL, _CommaSepDotSepGL
-from bones.kernel.symbol_table import VMeta, FnMeta, fnSymTab, ArgCatcher, blockSymTab
+from bones.kernel.symbol_table import VMeta, FnMeta, fnSymTab, blockSymTab
 from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
     tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
 from bones.ts.metatypes import BTTuple, BTStruct
@@ -366,7 +367,7 @@ def parsePhrase(tokens, symtab, k):
                         raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
                     tcnode, numConsumed = buildFnApplication(tcnode, meta.symtab, name, symtab, tokens, k)
                     tokens >> numConsumed
-                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGp) and name in symtab.argCatcher.inferredArgnames:
+                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGp) and name in symtab.implicitParams:
                     if accessors:
                         raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
@@ -494,6 +495,7 @@ def parsePhrase(tokens, symtab, k):
         else:
 
             if isinstance(t, FuncOrStructGp):
+                # {[x:tArg1, y:tArg2] <:tRet> x + y}, {x + y}, etc
                 if t._unaryBinaryOrStruct == STRUCT:
                     # create the tclitstruct and the struct type
                     vs, names, ts = [], [], []
@@ -514,16 +516,16 @@ def parsePhrase(tokens, symtab, k):
                     # implicit args need to be done here
                     fnSt = fnSymTab(symtab)
                     if t._params is Missing:
-                        fnSt.argCatcher = ArgCatcher([])
-                    else:
-                        argnames, tArgs = parseParameters(t._params, fnSt, k.sm)
-                    # {[] <:tRet> x + y...
-                    tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
-                    body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
-                    if t._params is Missing:
-                        argnames = fnSt.argCatcher.inferredArgnames
+                        with context(catchImplicitParams=True):
+                            body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
+                        argnames = fnSt.implicitParams
                         argnames.sort(key=_inDictionaryOrder)
                         tArgs = [TBI] * len(argnames)
+                        tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
+                    else:
+                        argnames, tArgs = parseParameters(t._params, fnSt, k.sm)
+                        tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
+                        body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
                     if t._unaryBinaryOrStruct == UNARY: style = unary
                     elif t._unaryBinaryOrStruct == BINARY: style = binary
                     else: raise ProgrammerError()
@@ -567,13 +569,13 @@ def parsePhrase(tokens, symtab, k):
 
                         # create a fn with generic tArgs and tRet
                         name = tcnode.name
-                        if symtab.argCatcher and name in symtab.argCatcher.inferredArgnames:
+                        if name in symtab.implicitParams:
                             symtab.changeVMetaToFnMeta(name)
                         tup = parseTupParenOrDestructureGroup(t, symtab, k)
                         numArgs = 1
                         fnode = tcgetoverload(t.tok1, symtab, name, numArgs, LOCAL_SCOPE)      # OPEN handle partials
-                        f = tcfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,)*numArgs), TBI, Missing, unary)
-                        overload = symtab.bindFn(name, f)
+                        # f = tcfunc(t.tok1, t.tok2, Missing, ['?'] * numArgs, BTTuple(*(TBI,)*numArgs), TBI, Missing, unary)
+                        # overload = symtab.bindFn(name, f)
                         tcnode = tcapply(t.tok1, t.tok2, symtab, fnode, tup)
                         tokens >> 1
                     else:

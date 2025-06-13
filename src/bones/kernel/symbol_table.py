@@ -10,13 +10,13 @@
 import collections, itertools
 from collections import namedtuple
 from bones import jones
+from bones.core.context import context
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
-from coppertop.pipe import _Family
 from bones.core.errors import ScopeError
-from bones.lang.types import TBI, _tvfunc
+from bones.lang.types import _tvfunc, TBI
 from bones.kernel.tc import tcfunc
-from bones.ts.metatypes import BTUnion, BTFn, BTFamily
+from bones.ts.select import Overload, Family
 from bones.kernel.core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
 
@@ -81,75 +81,6 @@ class FnMeta(_Meta): pass
 class TMeta(_Meta): pass
 
 
-class Overload:
-    # holds a collection of functions for a given name and number of args
-
-    __slots__ = ['name', 'numargs', '_fnsTBI', '_t_', '_tUpperBounds_', '_fnBySig']
-
-    def __init__(self, name, numargs):
-        self.name = name
-        self.numargs = numargs
-        self._fnsTBI = _TBIQueue()
-        self._t_ = Missing
-        self._tUpperBounds_ = Missing           # set else where
-        self._fnBySig = {}
-
-    @property
-    def _t(self):
-        if self._t_ is Missing:
-            self._t_ = BTFamily(*[fn._t for fn in self._fnBySig.values()])
-        return self._t_
-
-    def __setitem__(self, sig, fn):
-        if fn.numargs != self.numargs: raise ProgrammerError()
-        self._t_ = Missing
-        self._tUpperBounds_ = Missing
-        needsInferring = False
-        for tArg in fn.tArgs:
-            if tArg == TBI:
-                needsInferring = True
-                break
-        if fn.tRet == TBI:
-            needsInferring = True
-        if needsInferring:
-            # if any arg needs to be inferred then it cannot be added to the overload yet and that can only be done
-            # post inference so let's trying queuing it?
-            self._fnsTBI << fn
-        else:
-            if fn in self._fnsTBI:
-                self._fnsTBI.remove(fn)
-            self._fnBySig[sig] = fn
-
-    def __getitem__(self, sig):
-        return self._fnBySig[sig]
-
-    def __repr__(self):
-        answer = f'{self.name}_{self.numargs}'
-        ppT = ''
-        try:
-            ppT = repr(self._t)
-        except:
-            1/0
-            try:
-                tArgs = []
-                tRets = []
-                # collate the types for each arg
-                for i in range(self.numargs):
-                    tArgsN = []
-                    for fn in self._fnsTBI:
-                        tArgsN.append(fn.tArgs.types[i])
-                    tArgs.append(BTUnion(*tArgsN) if len(tArgsN) != 1 else tArgsN[0])
-                # collate the tRets
-                for fn in self._fnsTBI:
-                    tRets.append(fn.tRet)
-                tRet = BTUnion(*tRets) if len(tRets) > 1 else tRets[0]
-                ppT = repr(BTFn(tArgs, tRet))
-            except:
-                ppT = 'Error calc _tUpper'
-
-        return f'{answer} ({ppT})'
-
-
 
 class SymbolTable:
 
@@ -157,8 +88,8 @@ class SymbolTable:
         'name', 'kernel',
         '_lexicalParentSymTab', '_contextSymTab', '_moduleSymTab', '_globalSymTab',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
-        '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newOverloadsByNumArgs',
-        'argCatcher', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
+        '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newFamilyByName',
+        'implicitParams', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
         '_globalGets', '_localSets', '_contextSets', '_globalSets'
     ]
 
@@ -184,9 +115,9 @@ class SymbolTable:
         self._newVMetaByName = {}
         self._newFnMetaByName = {}
         self._newTMetaByName = Missing if globalSt else {}  # and here
-        self._newOverloadsByNumArgs = [{} for i in range(MAX_NUM_ARGS + 1)]
+        self._newFamilyByName = {}
 
-        self.argCatcher = Missing
+        self.implicitParams = []
         self.inferring = InferringHelper([], [])
 
         self._localGets = set()
@@ -240,9 +171,9 @@ class SymbolTable:
             m = self._newVMetaByName.get(name, Missing)
             if m is Missing:
                 m = self._vMetaByName.get(name, Missing)
-            if m is Missing and self.argCatcher and len(name) == 1:
+            if m is Missing and context.catchImplicitParams and len(name) == 1:
                 m = self.defVMeta(name, TBI, scope)
-                self.argCatcher.inferredArgnames.append(name)
+                self.implicitParams.append(name)
             return m
         elif scope == PARENT_SCOPE:
             raise NotYetImplemented()
@@ -357,26 +288,21 @@ class SymbolTable:
 
     def bindFn(self, name, fn):
         if not self.hasF(name): raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, _Family, tcfunc)) and fn != TBI: raise ProgrammerError()
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc)) and fn != TBI: raise ProgrammerError()
         if self._globalSymTab is Missing: raise ScopeError("Missing global scope")
         if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
-        numargs = fn.numargs
-        overloadsByName = self._newOverloadsByNumArgs[numargs]
-        if (overload := overloadsByName.get(name, Missing)) is Missing: overload = overloadsByName[name] = Overload(name, numargs)
+        overload = self.getOverload(name, fn.numargs)
         overload[fn.tArgs] = fn
         return overload
 
     def getOverload(self, name, numargs):
         # MUSTDO merge the new ones with the old ones
-        return self._newOverloadsByNumArgs[numargs][name]
+        return self.getFamily(name).getOverload(numargs)
 
     def getFamily(self, name):
-        ovs = [Missing for i in range(MAX_NUM_ARGS + 1)]
-        for i, m in enumerate(self._newOverloadsByNumArgs):
-            # MUSTDO merge the new ones with the old ones
-            if (ov := m.get(name, Missing)) is not Missing:
-                ovs[i] = ov
-        return _Family(*ovs)
+        if (family := self._newFamilyByName.get(name, Missing)) is Missing:
+            self._newFamilyByName[name] = family = Family.newForMutation(name=name)
+        return family
 
     @property
     def path(self):
@@ -425,24 +351,4 @@ def blockSymTab(lexicalParentSt):
     return lexicalParentSt
 
 
-class _TBIQueue:
-    def __init__(self):
-        self._fns = []   # need a queue as potentially the parser could add more than one before types are inferred
-    def __lshift__(self, f):   # self << f
-        self._fns.append(f)
-    def __contains__(self, f):
-        return f in self._fns
-    def remove(self, f):
-        self._fns.remove(f)
-    def __repr__(self):
-        return f'<{", ".join([repr(e) for e in self._fns])}>'
-    def __len__(self):
-        return len(self._fns)
-    # def first(self):
-    #     return self._fns[0]
-    def __iter__(self):
-        return iter(self._fns)
-
-
-ArgCatcher = collections.namedtuple('ArgCatcher', ['inferredArgnames'])
 InferringHelper = collections.namedtuple('InferringHelper', ['typeVariables', 'fnVariables'])

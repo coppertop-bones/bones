@@ -119,18 +119,18 @@ class PythonStorageManager:
             if ov is Missing: raise ProgrammerError()
         return ov
 
-    def getFamily(self, symtab, scope, name):
-        # check local frame first (as the function may have been passed as an argument)
-        if scope == LOCAL_SCOPE:
-            frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
-        else:
-            raise NotImplementedError()
-        if (ov := frame.values.get(name, Missing)) is Missing:
-            # do the usual symtab search
-            fnMeta = symtab.fMetaForGet(name, scope)   # get the meta using just the name
-            ov = fnMeta.symtab.getOverload(name, numargs)  # get the fn using the name and number of args
-            if ov is Missing: raise ProgrammerError()
-        return ov
+    # def getFamily(self, symtab, scope, name):
+    #     # check local frame first (as the function may have been passed as an argument)
+    #     if scope == LOCAL_SCOPE:
+    #         frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
+    #     else:
+    #         raise NotImplementedError()
+    #     if (ov := frame.values.get(name, Missing)) is Missing:
+    #         # do the usual symtab search
+    #         fnMeta = symtab.fMetaForGet(name, scope)   # get the meta using just the name
+    #         ov = fnMeta.symtab.getOverload(name, numargs)  # get the fn using the name and number of args
+    #         if ov is Missing: raise ProgrammerError()
+    #     return ov
 
 
 
