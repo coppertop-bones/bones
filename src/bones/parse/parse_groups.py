@@ -1100,9 +1100,12 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
         self._finishCommaSection(token)
         self._finishRow()
         self._finalise(token)
-        if self._phrases and self._phrases[0] and self._phrases[0] and isinstance(self._phrases[0][0][0], TypelangGp):
-            self._tRet = self._phrases[0][0]
-            self._phrases[0].pop(0)
+    def _finalise(self, tokenOrGroup):
+        if self._tokens is Missing: raise ProgrammerError()
+        super()._finalise(tokenOrGroup)
+        if self._grid and self._grid[0] and self._grid[0][0] and self._grid[0][0][0] and isinstance(self._grid[0][0][0][0] ,TypelangGp):
+            self._tRet = self._grid[0][0][0][0]
+            self._grid[0][0][0].pop(0)
     @property
     def PPGroup(self):
         pps = self.grid.PPGroup
@@ -1111,7 +1114,17 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
     def PPDebug(self):
         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
 
-
+    #     self._finalise(token)
+    #
+    # def _finalise(self, tokenOrGroup):
+    #     if self._tokens is Missing: raise ProgrammerError()
+    #     if self._unaryBinaryOrStruct == UNARY_OR_STRUCT:
+    #         raise ProgrammerError()
+    #     super()._finalise(tokenOrGroup)
+    #     if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGp):
+    #         self._tRet = self._phrases[0][0]
+    #         self._phrases[0].pop(0)
+    #
 
 # **********************************************************************************************************************
 # (...

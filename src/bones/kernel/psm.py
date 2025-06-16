@@ -27,10 +27,12 @@ from bones.kernel.sym import SymManager
 
 class PythonStorageManager:
 
+    __slots__ = ('syms', '_holderByModPathByName', '_frameBySymTab', 'stack')
+
     def __init__(self):
         self.syms = SymManager()
         self._holderByModPathByName = {}
-        self.framesBySymTab = {}
+        self._frameBySymTab = {}
         self.stack = []
 
     def parseLitInt(self, s):
@@ -52,7 +54,7 @@ class PythonStorageManager:
         raise NotYetImplemented()
 
     def parseLitUtf8(self, s):
-        return littxt(s)
+        return littxt(s[1:-1])  # OPEN: strip the quotes in lex instead
 
     def parseSym(self, s):
         return self.syms.Sym(s)
@@ -69,17 +71,20 @@ class PythonStorageManager:
     def newTable(self):
         raise NotYetImplemented()
 
-    def framesForSymTab(self, symtab):
-        if (frame := self.framesBySymTab.get(symtab, Missing)) is Missing:
-            self.framesBySymTab[symtab] = frame = bframe(symtab, Missing)
+    def frameForSymTab(self, symtab):
+        if (frame := self._frameBySymTab.get(symtab, Missing)) is Missing:
+            self._frameBySymTab[symtab] = frame = bframe(symtab, Missing)
         return frame
 
-    def pushFrame(self, fnst):
+    def blockframeForSymTab(self, symtab, parent, argnames, ):
+        self.symtab, k.sm.stack[-1], self.argnames, self._tArgs, k.sm.frameForSymTab(self.symtab)
+
+    def pushFrame(self, symtab):
         if self.stack:
             current = self.stack[-1]
         else:
-            current = self.framesForSymTab(fnst)
-        self.stack.append(frame := bframe(fnst, current))
+            current = self.frameForSymTab(symtab)
+        self.stack.append(frame := bframe(symtab, current))
         return frame
 
     def popFrame(self):
@@ -89,27 +94,27 @@ class PythonStorageManager:
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(symtab)
+            frame = self.frameForSymTab(symtab)
         frame[name] = value
 
     def getValue(self, symtab, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(symtab)
+            frame = self.frameForSymTab(symtab)
         return frame[name]
 
     def getReturn(self, symtab, scope, name):
         if scope == LOCAL_SCOPE and self.stack:
             frame = self.stack[-1]
         else:
-            frame = self.framesForSymTab(symtab)
+            frame = self.frameForSymTab(symtab)
         return frame.values.get(name, Missing)
 
     def getOverload(self, symtab, scope, name, numargs):
         # check local frame first (as the function may have been passed as an argument)
         if scope == LOCAL_SCOPE:
-            frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
+            frame = self.stack[-1] if self.stack else self.frameForSymTab(symtab)
         else:
             raise NotImplementedError()
         if (ov := frame.values.get(name, Missing)) is Missing:
@@ -122,7 +127,7 @@ class PythonStorageManager:
     # def getFamily(self, symtab, scope, name):
     #     # check local frame first (as the function may have been passed as an argument)
     #     if scope == LOCAL_SCOPE:
-    #         frame = self.stack[-1] if self.stack else self.framesForSymTab(symtab)
+    #         frame = self.stack[-1] if self.stack else self.frameForSymTab(symtab)
     #     else:
     #         raise NotImplementedError()
     #     if (ov := frame.values.get(name, Missing)) is Missing:
@@ -133,6 +138,7 @@ class PythonStorageManager:
     #     return ov
 
 
+    
 
 class bframe:
     def __init__(self, symtab, parent):
@@ -143,8 +149,33 @@ class bframe:
         self.values[key] = value
     def __getitem__(self, key):
         return self.values[key]
-    def __contains__(self, item):
-        return item in self.values
+    def __contains__(self, key):
+        return key in self.values
+    @property
+    def depth(self):
+        return self.parent.depth + 1 if self.parent else 1
+    def __repr__(self):
+        return f'bframe: [{self.depth}]{self.symtab.path}'
+
+
+class blockframe:
+    def __init__(self, symtab, parentFrame, argnames, lexicalParent):
+        self.symtab = symtab
+        self.parent = parent
+        self.lexicalParent = lexicalParent
+        self.values = {}
+    def __setitem__(self, key, value):
+        if key in self.values:
+            raise RuntimeError(f'Not allowed to rebind argument {key} in block {self.symtab.path}')
+        if key not in self.lexicalParent.values:
+            raise RuntimeError(f'Not allowed to bind new name "{key}" in parent {self.parent.symtab.path}')
+        self.parent.values[key] = value
+    def __getitem__(self, key):
+        if (v := self.values.get(key, Missing)) is Missing:
+            v = self.parent.values[key]
+        return v
+    def __contains__(self, key):
+        return key in self.values
     @property
     def depth(self):
         return self.parent.depth + 1 if self.parent else 1

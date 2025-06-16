@@ -8,7 +8,7 @@
 # **********************************************************************************************************************
 
 from bones.kernel.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
-    tcgetoverload, tclitstruct, tclittup, tclitbtype
+    tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock
 from bones.lang.types import _tvfunc
 from bones.kernel.core import MODULE_SCOPE
 from bones.kernel.symbol_table import Overload
@@ -52,7 +52,8 @@ class TCInterpreter:
         return answer
 
     def ex(self, n):
-        # print(f'Executing node: {n}')
+        if context.traceTcExec:
+            print(f'Executing node: {n}')
 
         if isinstance(n, tcapply):
             # context.tt << f'tcapply {n}'
@@ -70,7 +71,7 @@ class TCInterpreter:
             else:
                 raise ProgrammerError()
 
-            if isinstance(fn, tcfunc):
+            if isinstance(fn, (tcfunc, tcblock)):
                 return fn(*args)
 
             elif isinstance(fn, _tvfunc):
@@ -150,6 +151,10 @@ class TCInterpreter:
         elif isinstance(n, tcfunc):
             return n
 
+        elif isinstance(n, tcblock):
+            raise NotYetImplemented(f"tcblock {n}")
+            return blockctx(n, self.sm.stack[-1])
+
         elif isinstance(n, tcbindfn):
             # only needed to be done at parse time
             pass
@@ -166,6 +171,26 @@ class TCInterpreter:
 
         else:
             raise NotYetImplemented(f"Unhandled node {{{n}}}")
+
+# class blockctx:
+#     def __init__(self, tcblock, sm, enclosingFrame):
+#         self.block = block
+#         self.sm = sm
+#         self.parent = parentFrame
+#     def __call__(self, *args, **kwargs):
+#         # this allows the block to be called as a normal function from Python
+#         frame = self.sm.blockframe(self.symtab, k.sm.stack[-1], self.argnames, self._tArgs,
+#                           s               k.sm.frameForSymTab(self.symtab))
+#
+#         for name, arg in zip(self.argnames, args):
+#             k.sm.bind(frame.symtab, LOCAL_SCOPE, name, arg)
+#         for n in self.body:
+#             val = k.tcrunner.ex(n)
+#         if (ret := k.sm.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+#         return ret
+#
+#     def __repr__(self):
+#         return f'blockctx({self.block}, {self.parent}, {self.argnames}, {self.tArgs}, {self.frame})'
 
 
 py = BType('py')

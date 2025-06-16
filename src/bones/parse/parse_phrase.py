@@ -120,7 +120,7 @@ def snippetOrTc(phrases):
 
 
 def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
-    if isinstance(fOrName, tcfunc):
+    if isinstance(fOrName, (tcfunc, tcblock)):
         style = fOrName.literalstyle
     else:
         style = symtab.styleOfName(fOrName)
@@ -129,7 +129,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
         # possibilities
         # fn ()                     (fn may have more than one tuple afterward)
         if len(tokens) == 1:
-            if isinstance(fOrName, tcfunc):
+            if isinstance(fOrName, (tcfunc, tcblock)):
                 return fOrName, 1
             else:
                 f = parseSingle(tokens[0], symtab, k)
@@ -293,7 +293,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 def parseSingle(t, symtab, k):
     if isinstance(t, Token):
         tag = t.tag
-        if tag == NAME:
+        if tag in (NAME, SYMBOLIC_NAME):
             nameAndAccessors = t.src.split('.')
             name, accessors = nameAndAccessors[0], nameAndAccessors[1:]
             meta = symtab.fOrVMetaForGet(name, LOCAL_SCOPE)
@@ -413,15 +413,16 @@ def parsePhrase(tokens, symtab, k):
             elif tag == ASSIGN_RIGHT:
                 name = t.src
                 # take care with symtab here - probably needs careful thinking through
-                if isinstance(tcnode, tcfunc):
+                if isinstance(tcnode, (tcfunc, tcblock)):
                     # meta = symtab.fMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
                     #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
                     # more may need to happen here - e.g. check for style tag
-                    symtab.defFnMeta(name, tcfunc.tRet, LOCAL_SCOPE)   # create a slot in the symtab for the fn
+                    symtab.defFnMeta(name, tcnode.tRet, LOCAL_SCOPE)   # create a slot in the symtab for the fn
                     symtab.bindFn(name, tcnode)       # add it to the overloads (it will be queued if it needs inferring)
                     currentStyle = k.styleByName.setdefault(name, tcnode.literalstyle)
-                    if tcnode.literalstyle != currentStyle:
+                    if tcnode.literalstyle != currentStyle and not isinstance(tcnode, tcblock):
+                        # OPEN: allow style of local functions to differ from the global style - warn user
                         raise NotYetImplemented("Note that style has been changed")
                     tcnode = tcbindfn(min(t.tok1, tcnode.tok1), max(t.tok2, tcnode.tok2), symtab, name, tcnode, LOCAL_SCOPE)
                     tokens >> 1
@@ -512,7 +513,7 @@ def parsePhrase(tokens, symtab, k):
                 elif t._unaryBinaryOrStruct == UNARY_OR_STRUCT:
                     raise NotYetImplemented()
                 else:
-                    # OPRN: create the fnSymTab in the grouping stage and add explicit parameters and assigned variables there
+                    # OPEN: create the fnSymTab in the grouping stage and add explicit parameters and assigned variables there
                     # implicit args need to be done here
                     fnSt = fnSymTab(symtab)
                     if t._params is Missing:
@@ -582,16 +583,29 @@ def parsePhrase(tokens, symtab, k):
                         raise ProgrammerError()
 
             elif isinstance(t, BlockGp):
+                # OPEN: handle this case with dots in
+                # direction case: [[d]
+                #     d == `up,     y: y + 1. opCount: opCount + 1;
+                #     d == `down,   y: y - 1. opCount: opCount + 1;
+                #     d == `left,   x: x - 1. opCount: opCount + 1;
+                #     d == `right,  x: x + 1. opCount: opCount + 1;
+                # ]
                 blockSt = blockSymTab(symtab)
                 if t._params is Missing:
                     argnames, tArgs = [], []
                 else:
                     argnames, tArgs = parseParameters(t._params, blockSt, k.sm)
-                tRet = TBI if t._tRet is Missing else parseTypeLang(t._tRet, k)
-                body = [parsePhrase(phrase, blockSt, k) for phrase in t.phrases]
-                blockSt.defVMeta(RET_VAR_NAME, TBI, LOCAL_SCOPE)
-                tcnode = tcblock(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRet, body)
-                tokens[0] = tcnode
+                bodyGrid, tRetGrid = [], []
+                for i, row in enumerate(t._grid):
+                    bodyRow, tRetRow = [], []
+                    for j, cell in enumerate(row):
+                        bodyRow.append([parsePhrase(phrase, blockSt, k) for phrase in cell])
+                        tRetRow.append(BType(t._tRet.tl) if i == 0 and j == 0 and t._tRet else TBI)
+                    bodyGrid.append(bodyRow);  tRetGrid.append(tRetRow)
+                if len(bodyGrid) != 1 and len(bodyGrid[0]) != 1:
+                    raise NotYetImplemented('Only simple blocks are supported for now')
+                blockSt.defVMeta(RET_VAR_NAME, tRetGrid[0][0], LOCAL_SCOPE)
+                tcnode = tcblock(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRetGrid[0][0], bodyGrid[0][0])
                 tokens >> 1
 
             elif isinstance(t, FrameGp):

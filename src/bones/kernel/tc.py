@@ -24,7 +24,7 @@ import itertools, collections
 from bones.core.sentinels import Missing
 from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
 from bones.ts.metatypes import BType, BTFn, BTTuple
-from bones.lang.types import void, TBI, null
+from bones.lang.types import void, TBI, nullary
 from bones.kernel.core import LOCAL_SCOPE, RET_VAR_NAME
 
 _nodeseed = itertools.count(start=1)
@@ -133,6 +133,9 @@ class tcblock(tcnode):
     @property
     def tRet(self):
         return self.tOut
+    @property
+    def literalstyle(self):
+        return nullary
     def PPTC(self, depth, report):
         argPPs = []
         for argName, tArg in zip(self.argnames, self.tArgs):
@@ -142,10 +145,17 @@ class tcblock(tcnode):
             phrase.PPTC(depth + 1, report)
     def __repr__(self):
         nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
-        return f'{type(self).__name__}: {self.fullSig()}'
-    def fullSig(self):
+        return f'{type(self).__name__}: {self.ppSig()}'
+    def ppSig(self):
         nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
-        return f'{{[{", ".join(nameTs)}] -> {self.tOut}}}'
+        return f'({", ".join(nameTs)}) -> {self.tOut}'
+    @property
+    def fullname(self):
+        return self.symtab.name
+    @property
+    def modname(self):
+        return self.symtab.parentPath
+
 
 class tcfunc(tcblock):
     __slots__ = ['literalstyle']
@@ -156,7 +166,7 @@ class tcfunc(tcblock):
         super().__init__(tok1, tok2, symtab, argnames, tArgs, tRet, body)
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
-        # this allows the function to be called as a normal function from puthon
+        # this allows the function to be called as a normal function from Python
         frame = k.sm.pushFrame(self.symtab)
         for name, arg in zip(self.argnames, args):
             k.sm.bind(frame.symtab, LOCAL_SCOPE, name, arg)
@@ -165,6 +175,10 @@ class tcfunc(tcblock):
         if (ret := k.sm.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
         k.sm.popFrame()
         return ret
+    def ppSig(self):
+        nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
+        return f'[{", ".join(nameTs)}] -> {self.tOut}'
+
 
 class tcassumedfunc(tcfunc): pass
 

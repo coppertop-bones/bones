@@ -15,7 +15,7 @@ from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.core.errors import ScopeError
 from bones.lang.types import _tvfunc, TBI
-from bones.kernel.tc import tcfunc
+from bones.kernel.tc import tcfunc, tcblock
 from bones.ts.select import Overload, Family
 from bones.kernel.core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
@@ -154,7 +154,7 @@ class SymbolTable:
         elif scope == GLOBAL_SCOPE:
             self._globalGets.add(name)
         else:
-            raise ProgrammerError("Unknown scope '%s'" % scope)
+            raise ProgrammerError('Unknown scope "%s"' % scope)
 
     def noteSets(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -164,7 +164,7 @@ class SymbolTable:
         elif scope == GLOBAL_SCOPE:
             self._globalSets.add(name)
         else:
-            raise ProgrammerError("Unknown scope '%s'" % scope)
+            raise ProgrammerError('Unknown scope "%s"' % scope)
 
     def vMetaForGet(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -267,9 +267,9 @@ class SymbolTable:
             raise ProgrammerError()
 
     def defFnMeta(self, name, t, scope):
-        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
+        if self._globalSymTab is Missing: raise ScopeError('Can\'t define function in global scope')
         if scope == LOCAL_SCOPE:
-            if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
+            if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError('A name can only refer to a value or an fn')
             if name not in self._fnMetaByName or name not in self._newFnMetaByName:
                 self._newFnMetaByName[name] = FnMeta(t, self)
         elif scope == CONTEXT_SCOPE:
@@ -288,9 +288,10 @@ class SymbolTable:
 
     def bindFn(self, name, fn):
         if not self.hasF(name): raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc)) and fn != TBI: raise ProgrammerError()
-        if self._globalSymTab is Missing: raise ScopeError("Missing global scope")
-        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc, tcblock)) and fn != TBI:
+            raise ProgrammerError()
+        if self._globalSymTab is Missing: raise ScopeError('Missing global scope')
+        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError('A name can only refer to a value or an fn')
         overload = self.getOverload(name, fn.numargs)
         overload[fn.tArgs] = fn
         return overload
@@ -312,6 +313,15 @@ class SymbolTable:
         elif self._moduleSymTab is not Missing:
             answer += self._moduleSymTab.path
         return self.name if answer == '' else answer + '.' + self.name
+
+    @property
+    def parentPath(self):
+        answer = ''
+        if self._lexicalParentSymTab is not Missing:
+            answer += self._lexicalParentSymTab.path
+        elif self._moduleSymTab is not Missing:
+            answer += self._moduleSymTab.path
+        return answer
 
     def __repr__(self):
         return f'SymbolTable<{self.path}>'
