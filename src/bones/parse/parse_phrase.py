@@ -26,10 +26,10 @@ from bones.parse.lex import Token, prettyNameByTag, \
     GLOBALTIME_M, GLOBALTIME_SS, GLOBALTIME_S, \
     GLOBALTIMESTAMP_M, GLOBALTIMESTAMP_S, GLOBALTIMESTAMP_SS, \
     LOCALTIMESTAMP_SS, LOCALTIMESTAMP_S, LOCALTIMESTAMP_M, \
-    NAME, SYMBOLIC_NAME, ASSIGN_RIGHT, ASSIGN_LEFT, \
+    NAME, SYMBOLIC_NAME, BIND_RIGHT, BIND_LEFT, \
     PARENT_VALUE_NAME, \
-    CONTEXT_NAME, CONTEXT_ASSIGN_RIGHT, \
-    GLOBAL_NAME, GLOBAL_ASSIGN_RIGHT, KEYWORD_OR_ASSIGN_LEFT, SYMBOLIC_NAME, ELLIPSES
+    CONTEXT_NAME, CONTEXT_BIND_RIGHT, \
+    GLOBAL_NAME, GLOBAL_BIND_RIGHT, KEYWORD_OR_BIND_LEFT, SYMBOLIC_NAME, ELLIPSES
 from bones.parse.parse_groups import \
     LoadGp, FromImportGp, \
     FuncOrStructGp, TupParenOrDestructureGp, BlockGp, \
@@ -169,7 +169,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
                 else:
                     raise ProgrammerError()
             elif isinstance(next, Token):
-                if next.tag == ASSIGN_RIGHT:
+                if next.tag == BIND_RIGHT:
                     # OPEN: handle {a+1} :f (1)   which should answer tcapply(tcbindfn('f', deffn(...)),1) but may impact elsewhere
                     # handled in main parse loop so just put the function in the tcnode and consume 1 token
                     if ctxWithFn is Missing:
@@ -410,7 +410,7 @@ def parsePhrase(tokens, symtab, k):
                 if meta is Missing: raise SentenceError(f"unknown parent value name - {name}")
                 raise NotYetImplemented()
 
-            elif tag == ASSIGN_RIGHT:
+            elif tag == BIND_RIGHT:
                 name = t.src
                 # take care with symtab here - probably needs careful thinking through
                 if isinstance(tcnode, (tcfunc, tcblock)):
@@ -437,12 +437,12 @@ def parsePhrase(tokens, symtab, k):
                     tcnode = tcbindval(t.tok1, t.tok2, symtab, tcnode, LOCAL_SCOPE, name, accessors)
                     tokens >> 1
 
-            elif tag == CONTEXT_ASSIGN_RIGHT:
+            elif tag == CONTEXT_BIND_RIGHT:
                 name = t.src
                 meta = symtab.fOrVMetaForBind(name, CONTEXT_SCOPE)
                 raise NotYetImplemented()
 
-            elif tag == GLOBAL_ASSIGN_RIGHT:
+            elif tag == GLOBAL_BIND_RIGHT:
                 name = t.src
                 meta = symtab.vMetaForBind(name, GLOBAL_SCOPE)
                 if meta is not Missing:
@@ -483,9 +483,9 @@ def parsePhrase(tokens, symtab, k):
             ):
                 raise NotYetImplemented()
 
-            elif tag == ASSIGN_LEFT:
+            elif tag == BIND_LEFT:
                 k.dumpLines(t.srcId, t.l1-3, t.l2)
-                raise ProgrammerError("Looks like the grouping hasn't worked proprerly", ErrSite("Encountered ASSIGN_LEFT"))
+                raise ProgrammerError("Looks like the grouping hasn't worked proprerly", ErrSite("Encountered BIND_LEFT"))
 
             elif tag == NULL:
                 return tcvoidphrase(t.tok1, t.tok2, symtab)
@@ -626,7 +626,7 @@ def parsePhrase(tokens, symtab, k):
                 for phr in t.phrases:
                     name = ''
                     for tok in phr:
-                        if tok.tag == KEYWORD_OR_ASSIGN_LEFT:
+                        if tok.tag == KEYWORD_OR_BIND_LEFT:
                             name += tok.src
                             name += ':'
                         elif tok.tag in (NAME, SYMBOLIC_NAME):

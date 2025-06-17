@@ -20,6 +20,37 @@ from bones.ts.select import Overload, Family
 from bones.kernel.core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
 
+# SymbolTable
+# The purpose of the symbol table is to map a name (symbol) into the overall structure of the program. For example, in
+# C a name in a block could be defined in the block scope, the parent block scope, ..., enclosing function scope or
+# global scope. In a Python a name in a function can be found in the function's env, in a parent function, ..., module.
+# This resolution must happen after parsing (consider defining fred after fred has been gotten from a parent scope) and
+# before the analysis step. It must also be done after the module (consider defining a name after a function). After
+# parsing the symbol tables for the module and each function and block must be consolidated. After this consolidation
+# the symbol tables know where each names lives - in the global, contextual, frame or code scopes - and can be called
+# on to generate offsets (in the Python implementation) for those different scopes.
+
+# in the REPL we can define a function called fred that refers to a module variable jow that hasn't been defined yet?
+# in a modules source this is clearly possible.
+
+# thus bones is multi pass and can refer to names defined later - which can make for nicer code organisation.
+
+# The scope modifiers ".", "..", "_." and "_.." add a little more structure to the program's source code, in fact
+# enough stucture that the only names that might need consolidating are block variables, which are always defined in
+# the enclosing function's scope. Thus, we could have a consolidation step in bones (and should know where it comes in
+# the PACE process) but we don't need one for now. If we added block locals or one level access then we would
+# potentially need a consolidation step. If we allowed the parent scope modified to scan up the parent's parent all the
+# way up to the module we would need a consolidation process and consolidation rules to handle ambiguities.
+
+# Note block arguments may be the same name as names in the enclosing function scope. Thus this is allowable:
+
+# {
+#     x = 1
+#     [1,2,3] collect [[x] x + 1]
+# }
+
+
+
 
 # SymbolTable
 #   holds all information for symbols
@@ -349,6 +380,21 @@ class SymbolTable:
         self.defVMeta(name, TBI, LOCAL_SCOPE)
         return self._newVMetaByName[name]
 
+
+class GlobalScope(SymbolTable):
+    pass
+
+class ModuleScope(SymbolTable):
+    pass
+
+class ContextualScope(SymbolTable):
+    pass
+
+class FunctionScope(SymbolTable):
+    pass
+
+class BlockScope(SymbolTable):
+    pass
 
 
 def fnSymTab(lexicalParentSt):
