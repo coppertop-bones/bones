@@ -82,6 +82,7 @@ to pipeline style that it seems impossible to incorporate them. (The upside of l
 parser is much simpler).
 
 
+<br>
 
 ### SYNTAX TOUR
 
@@ -142,6 +143,8 @@ aConstantValue()
 join("Hello ", "world!")
 ```
 
+<br>
+
 #### pipe style
 
 A phrase is interpreted left to right except for function application which has precedence over the pipeline.
@@ -166,10 +169,13 @@ Default ordinal (i.e. how a literal int is interpreted) is the index rather than
 
 <br>
 
-#### functions
+#### functions & blocks
 ```
-{[a] a + 1}
-{x + 1}
+{[a] a + 1}                         // cannot implicitly access and value name in enclosing scope
+{x + 1}                             // with implicit arg x
+
+[[a] a + 1]
+[b: 1]                              // rebinds b in enclosing scope
 ```
 
 <br>
@@ -192,10 +198,10 @@ Some sequences are also reserved, i.e. //, <:..>, {...}, {[...]...}, ([...]...)
 
 <br>
 
-### type tags
+#### type tags
 ```
 1 <:offset>
-{[x:num] x + 1}<:num> :addOne
+{[x:num] <:num> x + 1} :addOne
 ```
 
 <br>
@@ -208,7 +214,7 @@ from bones.std import do, print         // adds the name do and print to this mo
 
 <br>
 
-#### scopes
+#### scope modifiers
 ```
 .aReadOnlyVariableFromMyParentsContext
 ..aReadOnlyVariableFromMyModulesContext
@@ -216,7 +222,9 @@ _.aRWVariableInTheContextualContext
 _..aRWVariableInTheGlobalContext
 ```
 
-### Next
+<br>
+
+### NEXT
 
 #### example bones code working end to end
 
@@ -258,7 +266,7 @@ instantly know how to fix the problem and not to have to hunt around to understa
 <br>
 
 
-### Later
+### LATER
 
 #### profiling
 
@@ -275,8 +283,8 @@ Convert TC to Byte Code (BC), Internal Representation (IR) for a compiler (e.g. 
 or possibly QBE, LLVM, etc) and / or Machine Code (MC).
 
 #### duck types
-e.g. N**T1{PP(T1)->str} - a seq of types that have pretty print (PP) defined \
-e.g. N**T1{area(T1)-cm2} - a seq of types that have the function area defined
+e.g. N\**T1{PP(T1)->str} - a seq of types that have pretty print (PP) defined \
+e.g. N\**T1{area(T1)-cm2} - a seq of types that have the function area defined
 
 
 #### ABIs
@@ -284,13 +292,7 @@ e.g. N**T1{area(T1)-cm2} - a seq of types that have the function area defined
 Bones will be able to call C ABI functions and should be able to call Fortran functions.
 
 
-### contingent types
+#### contingent types
 the intention is to only dynamically check these - if we ever (unlikely) need pattern matching they would be used there \
 e.g. N**T1{fred&joe} - a seq of types that the predicates fred and joe return true
 
-
-
-GOALS
-
-1) pybones - a python implementation of bones where the standard library is implemented in python, where python can
-   call bones and bones call python
