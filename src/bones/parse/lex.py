@@ -265,63 +265,75 @@ def compileBonesRE(rule):
     # (r'(?<![.a-zA-Z])([a-zA-Z][a-zA-Z_0-9]*)', NAME),
 
 
-NON_ALPHA_NAME = '([0-9a-zA-Z<>!=#_@$%^&*+/|~\'\?\-]*)'  # see https://prog21.dadgum.com/20.html
-NON_ALPHA_NAME = '([0-9a-zA-Z<!=#_@$%^&*+/|~\'\?\-]*)'  # see https://prog21.dadgum.com/20.html
-NON_ALPHA_NAME = '([0-9a-zA-Z]\w*)'  # see https://prog21.dadgum.com/20.html
+
+# do this https://prog21.dadgum.com/20.html?
+#
+# a collect {x*2} <:matrix>
+#         vs
+# person?: a typeOf <= <:Person>
+# update!
+# colour@
+#
+# I prefer the former
+
+
+ALPHA_NUMERIC_NAME_RE = '([a-zA-Z_]\w*)'
+OPERATOR_RE = '([_<>!=#_@$%^&*+/|~\'\?\-])'
+
 
 _NAME_RE = f'''
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _PARENT_VALUE_NAME_RE = fr'''
     (\.)                (?#one dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _MODULE_VALUE_NAME_RE = fr'''
     (\.\.)              (?#two dots)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _CONTEXT_NAME_RE = fr'''
     (_\.)               (?#underscore,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _CONTEXT_BIND_LEFT_RE = fr'''
     (_\.)               (?#underscore,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
     (:)                 (?#colon)
 '''
 
 _CONTEXT_BIND_RIGHT_RE = fr'''
     (:_\.)              (?#colon,underscore,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _GLOBAL_NAME_RE = fr'''
     (_\.\.)             (?#underscore,underscore,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 _GLOBAL_BIND_LEFT_RE = fr'''
     (_\.\.)             (?#underscore,dot,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
     (:)                 (?#colon)
 '''
 
 _GLOBAL_BIND_RIGHT_RE = fr'''
     (:_\.\.)            (?#colon,underscore,dot,dot)
-    ({NON_ALPHA_NAME}\.)*   (?#zero or more {{name,dot}})
-    {NON_ALPHA_NAME}      (?#name)
+    ({ALPHA_NUMERIC_NAME_RE}\.)*   (?#zero or more {{name,dot}})
+    {ALPHA_NUMERIC_NAME_RE}      (?#name)
 '''
 
 
@@ -366,6 +378,7 @@ _bonesLexRules = [
     (r'>(?!>)', R_ANGLE),  # a lone '>'
     (r'\^\^(?!\^)', SIGNAL),
     (r'\^(?!\^)', RETURN),
+    (r'<:', L_ANGLE_COLON),
     
     (_GLOBAL_BIND_LEFT_RE, GLOBAL_BIND_LEFT),
     (_GLOBAL_NAME_RE, GLOBAL_NAME),
@@ -393,10 +406,10 @@ _bonesLexRules = [
     (r'}}', R_BRACE_BRACE),
     (r'{', L_BRACE),
     (r'}', R_BRACE),
-    (r'<:', L_ANGLE_COLON),
     
     (r'\\(^\t| )*[\n]', CONTINUATION),                     # consumes just one \n
-    (r'[<>!=#_@$%^&*+/|~\'\?\-]{1,3}', SYMBOLIC_NAME),  # comes after TEXT, and NAME
+
+    (rf'{OPERATOR_RE}{{1,3}}', SYMBOLIC_NAME),    # comes after TEXT, and NAME
     (r'[\.]{4,}', ILLEGAL_MANY_DOTS),
     (r'(\.\.\.)', ELLIPSES),
     (r'(\.\.)', ILLEGAL_TWO_DOTS),
@@ -454,7 +467,7 @@ def _PPGroup(self):
     if tag == GLOBAL_NAME:
         return '_..n'
     if tag == SYMBOLIC_NAME:
-        return 'o'
+        return 'n'
     if tag == RETURN:
         return '^'
     if tag == SIGNAL:

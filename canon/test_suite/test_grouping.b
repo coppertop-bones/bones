@@ -22,10 +22,10 @@
 // {[ ] and , a param list rather than an expression list, sep = ,   param [type] + name
 // {[] x}
 {[x] x}
-{[x,y] x; y}
-{[<:num>x] x}
-{[x,<:num>y] x; y}
-<:num>{[x,<:num>y] x; y}
+{[x,y] x. y}
+{[x:num] x}
+{[x,y:num] x. y}
+{[x,y:num] <:num> x. y}
 
 
 // INVOCATION
@@ -37,7 +37,7 @@
 name[]
 name[a]
 name[a,b]
-{}[expr*]
+{x}[expr*]
 
 
 // PARENS
@@ -57,7 +57,7 @@ name[a,b]
 .cfg..PROD.serverHP lookupIP cout
 */
 
-solveAx_b_QR{[A <:matrix>, b <:vector>]
+solveAx_b_QR{[A:matrix, b:vector]
     // solves Ax = b using QR decomposition
     // QRx = b
     // Q'QRx = Q'b
@@ -67,9 +67,9 @@ solveAx_b_QR{[A <:matrix>, b <:vector>]
 }
 '(typedefs)
 <:matrix> = <:list(list(double))>  // ideally should ensure grid
-types -> lists, assoc, unions, structs of
-string, float, int, bool, sym
-table is list(struct(a:int,name:sym
+types -> (lists, assoc, unions, structs of)
+(string, float, int, bool, sym)
+//table is list(struct(a:int,name:sym
 NULL
 MISSING
 ISIN -> string
@@ -82,11 +82,11 @@ depth->float
 volume -> float
 variant -> union(string,float,int,bool,sym,NULL,MISSING)
 '
-mul{[x <:matrix>, y <:matrix>] ^linlibMulMM[x,y] <:matrix>}
-mul{[x <:matrix>, y <:vector>] ^linlibMulMV[x,y] <:vector>}
-'{[A <:matrix>] linlibTransposeM[A]}
-!{[LHS <:double>] factorial[LHS]}
-!{[LHS <:ANY>, RHS <:bool> <:P4>] not(RHS)}
+mul{[x:matrix, y:matrix] <:matrix> ^linlibMulMM[x,y] }      // explicit return type
+mul{[x:matrix, y:vector] ^linlibMulMV[x,y] <:vector>}       // inferred return type
+'{[A:matrix>] linlibTransposeM[A]}
+!{[LHS:double] factorial[LHS]}
+!{[LHS:ANY, RHS:bool ] <:P4> not(RHS)}
 
 
 
@@ -104,13 +104,13 @@ a: 10 <:float> :b <:int>
 a: getInt[] <:float>
 
 
-// TABLE
-// ([ ] assign expr and ,
-([a: expr])         // should generate the relevant symbols
-([a: expr] b: expr)
-([a: expr, c: expr] b: expr)
-([a: expr, c: expr] b: expr, d: expr)
-([a: expr <:int>])         // should generate the relevant symbols
-([a: expr <:list(int)>] b: expr <:list(int)>)
-([a: expr <:list(sym)>, c: expr <:int>] b: expr <:int>)
-([a: expr <:int>, c: expr <:int>] b: expr <:int>, d: expr <:int>)
+//// TABLE
+//// ([ ] assign expr and ,
+//([a: expr])         // should generate the relevant symbols
+//([a: expr] b: expr)
+//([a: expr, c: expr] b: expr)
+//([a: expr, c: expr] b: expr, d: expr)
+//([a: expr <:int>])         // should generate the relevant symbols
+//([a: expr <:list(int)>] b: expr <:list(int)>)
+//([a: expr <:list(sym)>, c: expr <:int>] b: expr <:int>)
+//([a: expr <:int>, c: expr <:int>] b: expr <:int>, d: expr <:int>)

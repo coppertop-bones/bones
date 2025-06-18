@@ -49,23 +49,23 @@
 # more context sensitive phrase parsing phase.
 #
 # _Group
-#   |--- _Phrase
-#   |        |--- ParameterGp
-#   |        \--- TypelangGp
+#   |--- _PhraseGrp
+#   |        |--- ParameterGrp
+#   |        \--- TypelangGrp
 #   \--- _PhrasesGrp
-#            |--- _KeywordGp
-#            |--- FromImportGp
-#            |--- LoadGp
-#            |--- ParametersGp
+#            |--- _KeywordGrp
+#            |--- FromImportGrp
+#            |--- LoadGrp
+#            |--- ParametersGrp
 #            |--- SnippetGrp
-#            |--- FrameGp
-#            |--- FrameKeysGp
-#            |--- FuncOrStructGp
+#            |--- FrameGrp
+#            |--- FrameKeysGrp
+#            |--- FuncOrStructGrp
 #            |--- _SemiColonSepCommasSepPhrase
-#            |        \--- TupParenOrDestructureGp
+#            |        \--- TupParenOrDestructureGrp
 #            \--- _XSepYSepPhrase   (Y can be dot_or_new_line)
 #                     \--- _SemiColonSepCommasSepDotNLSepPhrase
-#                              \--- BlockGp
+#                              \--- BlockGrp
 #
 # list
 #   \--- _GuardedList
@@ -337,7 +337,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
     for token in tokens[1:]:
         opener = openers.get(token.tag, Missing)
         isCloser = token.tag in closers
-        isNormal = (not opener and not isCloser) or (token.tag == R_ANGLE and not isinstance(currentG, TypelangGp))
+        isNormal = (not opener and not isCloser) or (token.tag == R_ANGLE and not isinstance(currentG, TypelangGrp))
 
         # find a consumer for the token
         consumer = Missing
@@ -406,9 +406,9 @@ def parseStructure(tokens, symtab, src, TRACE=False):
 
         # pop groups off the stack that have finished consuming tokens
         while currentG._tokens is Missing:
-            if isinstance(currentG, TypelangGp):
+            if isinstance(currentG, TypelangGrp):
                 currentG.tl = src[currentG.s1+2:currentG.s2-1]
-            if isinstance(currentG, ParametersGp):
+            if isinstance(currentG, ParametersGrp):
                 for p in currentG.phrases:
                     if len(p) != 1: 1/0
                     p = p[0]
@@ -700,7 +700,7 @@ class _Group:
 
 
 
-class _Phrase(_Group):
+class _PhraseGrp(_Group):
     # the abstract base class for single phrase groups, e.g. parameters and typelang
 
     def __init__(self, parent, opener, symtab):
@@ -922,7 +922,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                 raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #2"), group, tokenOrGroup)
             elif phrase[0].tag == GLOBAL_BIND_LEFT:
                 raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #3"), group, tokenOrGroup)
-            elif isinstance(phrase[0], TupParenOrDestructureGp) and phrase[0]._isDestructure:
+            elif isinstance(phrase[0], TupParenOrDestructureGrp) and phrase[0]._isDestructure:
                 raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #4"), group, tokenOrGroup)
 
     elif len(phrase) >= 2:
@@ -940,7 +940,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                 symtab.noteSets(phrase[0].src, GLOBAL_SCOPE)
                 phrase = phrase[1:] + [toGlobalAssignRight(phrase[0])]
 
-        elif isinstance(phrase[0], TupParenOrDestructureGp) and phrase[0]._isDestructure:
+        elif isinstance(phrase[0], TupParenOrDestructureGrp) and phrase[0]._isDestructure:
             # move first token to end
             for row in phrase[0].grid:
                 for tok in row:
@@ -950,7 +950,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         raise NotYetImplemented()
             phrase = phrase[1:] + [phrase[0]]
 
-        # if isinstance(phrase[0], TypelangGp) and isinstance(phrase[1], Token):
+        # if isinstance(phrase[0], TypelangGrp) and isinstance(phrase[1], Token):
         #     if phrase[1].tag == BIND_LEFT:
         #         # move first two tokens to end
         #         phrase = phrase[2:] + phrase[0:1] + [toAssignRight(phrase[1])]
@@ -970,17 +970,17 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                 if each.tag == BIND_LEFT:
                     varName = each.src
                     numNames += 1
-                    if isinstance(group, FuncOrStructGp):
+                    if isinstance(group, FuncOrStructGrp):
                         raise NotYetImplemented()
                 elif each.tag == BIND_RIGHT:
                     varName = each.src
                     numNames += 1
-                    if isinstance(prior, FuncOrStructGp):
+                    if isinstance(prior, FuncOrStructGrp):
                         _checkStyle(prior, varName, symtab)
                         symtab.defFnMeta(varName, TBI, LOCAL_SCOPE)
-                    elif isinstance(group, FrameGp):
+                    elif isinstance(group, FrameGrp):
                         print()
-                        raise NotYetImplemented(f'_processAssigmentsInPhrase<FrameGp>: {group}')
+                        # raise NotYetImplemented(f'_processAssigmentsInPhrase<FrameGrp>: {group}')
                     elif isinstance(prior, type):
                         raise NotYetImplemented(f'_processAssigmentsInPhrase<type>: {group}')
                     else:
@@ -993,20 +993,20 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                 elif each.tag == CONTEXT_BIND_RIGHT:
                     varName = each.src[5:]
                     numNames += 1
-                    if isinstance(prior, FuncOrStructGp):
+                    if isinstance(prior, FuncOrStructGrp):
                         _checkStyle(prior, varName, symtab)
                         symtab.defFnMeta(varName, TBI, CONTEXT_SCOPE)
-                    elif isinstance(group, FuncOrStructGp):
+                    elif isinstance(group, FuncOrStructGrp):
                         raise GroupError("Can't context assign with frame group", ErrSite("_processAssigmentsInPhrase #5"), group, tokenOrGroup)
                     else:
                         symtab.defVMeta(varName, TBI, CONTEXT_SCOPE)
                 elif each.tag == GLOBAL_BIND_RIGHT:
                     varName = each.src[5:]
                     numNames += 1
-                    if isinstance(prior, FuncOrStructGp):
+                    if isinstance(prior, FuncOrStructGrp):
                         _checkStyle(prior, varName, symtab)
                         symtab.defFnMeta(varName, TBI, GLOBAL_SCOPE)
-                    elif isinstance(group, FuncOrStructGp):
+                    elif isinstance(group, FuncOrStructGrp):
                         raise GroupError("Can't global assign with frame group", ErrSite("_processAssigmentsInPhrase #6"), group, tokenOrGroup)
                     else:
                         symtab.defVMeta(varName, TBI, GLOBAL_SCOPE)
@@ -1015,9 +1015,9 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                 raise
             except Exception as ex:
                 raise GroupError(f"l1: {repr(group)} l2: {group.l2}", ErrSite("_processAssigmentsInPhrase #7"), group, tokenOrGroup) from ex
-        elif isinstance(each, TupParenOrDestructureGp) and each._isDestructure:
+        elif isinstance(each, TupParenOrDestructureGrp) and each._isDestructure:
             numNames += len(each.grid[0])
-        if isinstance(each, TypelangGp):
+        if isinstance(each, TypelangGrp):
             pass
         else:
             prior = each
@@ -1071,20 +1071,20 @@ class SnippetGrp(_PhrasesGrp):
 
 def catchLBracket(token, currentG, stack):
     if not (token.tag == L_BRACKET): return Missing
-    block = BlockGp(currentG, token, currentG.symtab)
+    block = BlockGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(block, token.indent)
     return stack.push(block)
 
 def catchLBracketBracket(token, currentG, stack):
     if not (token.tag == L_BRACKET_BRACKET): return Missing
-    block = BlockGp(currentG, token, currentG.symtab)
+    block = BlockGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(block, token.indent)
     stack.push(block)
-    dp = ParametersGp(block, token, block.symtab)
+    dp = ParametersGrp(block, token, block.symtab)
     block._params = dp
     return stack.push(dp)
 
-class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
+class BlockGrp(_SemiColonSepCommasSepDotNLSepPhrase):
     _isInteruptable = True
     _exactlyOneNameInPhrase = False
     _allowNLPhraseStart = True
@@ -1103,7 +1103,7 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
     def _finalise(self, tokenOrGroup):
         if self._tokens is Missing: raise ProgrammerError()
         super()._finalise(tokenOrGroup)
-        if self._grid and self._grid[0] and self._grid[0][0] and self._grid[0][0][0] and isinstance(self._grid[0][0][0][0] ,TypelangGp):
+        if self._grid and self._grid[0] and self._grid[0][0] and self._grid[0][0][0] and isinstance(self._grid[0][0][0][0] ,TypelangGrp):
             self._tRet = self._grid[0][0][0][0]
             self._grid[0][0][0].pop(0)
     @property
@@ -1121,7 +1121,7 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
     #     if self._unaryBinaryOrStruct == UNARY_OR_STRUCT:
     #         raise ProgrammerError()
     #     super()._finalise(tokenOrGroup)
-    #     if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGp):
+    #     if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGrp):
     #         self._tRet = self._phrases[0][0]
     #         self._phrases[0].pop(0)
     #
@@ -1132,17 +1132,17 @@ class BlockGp(_SemiColonSepCommasSepDotNLSepPhrase):
 
 def catchLParen(token, currentG, stack):
     if not (token.tag == L_PAREN): return Missing
-    il = TupParenOrDestructureGp(currentG, token, False, currentG.symtab)
+    il = TupParenOrDestructureGrp(currentG, token, False, currentG.symtab)
     currentG._consumeToken(il, token.indent)
     return stack.push(il)
 
 def catchColonLParen(token, currentG, stack):
     if not (token.tag == COLON_L_PAREN): return Missing
-    il = TupParenOrDestructureGp(currentG, token, True, currentG.symtab)
+    il = TupParenOrDestructureGrp(currentG, token, True, currentG.symtab)
     currentG._consumeToken(il, token.indent)
     return stack.push(il)
 
-class TupParenOrDestructureGp(_SemiColonSepCommasSepPhrase):
+class TupParenOrDestructureGrp(_SemiColonSepCommasSepPhrase):
     _exactlyOneNameInPhrase = False
     _allowNLPhraseStart = False
     _isInteruptable = True
@@ -1201,35 +1201,35 @@ class TupParenOrDestructureGp(_SemiColonSepCommasSepPhrase):
 
 def catchLBrace(token, currentG, stack):
     if not (token.tag == L_BRACE): return Missing
-    f = FuncOrStructGp(currentG, token, UNARY_OR_STRUCT, R_BRACE, COMMA_OR_DOT_SEP, fnSymTab(currentG.symtab))
+    f = FuncOrStructGrp(currentG, token, UNARY_OR_STRUCT, R_BRACE, COMMA_OR_DOT_SEP, fnSymTab(currentG.symtab))
     currentG._consumeToken(f, token.indent)
     return stack.push(f)
 
 def catchLBraceBracket(token, currentG, stack):
     if not (token.tag == L_BRACE_BRACKET): return Missing
-    f = FuncOrStructGp(currentG, token, UNARY, R_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
+    f = FuncOrStructGrp(currentG, token, UNARY, R_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
     currentG._consumeToken(f, token.indent)
     stack.push(f)
-    dp = ParametersGp(f, token, f.symtab)
+    dp = ParametersGrp(f, token, f.symtab)
     f._params = dp
     return stack.push(dp)
 
 def catchLBraceBrace(token, currentG, stack):
     if not (token.tag == L_BRACE_BRACE): return Missing
-    f = FuncOrStructGp(currentG, token, BINARY, R_BRACE_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
+    f = FuncOrStructGrp(currentG, token, BINARY, R_BRACE_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
     currentG._consumeToken(f, token.indent)
     return stack.push(f)
 
 def catchLBraceBraceBracket(token, currentG, stack):
     if not (token.tag == L_BRACE_BRACE_BRACKET): return Missing
-    f = FuncOrStructGp(currentG, token, BINARY, R_BRACE_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
+    f = FuncOrStructGrp(currentG, token, BINARY, R_BRACE_BRACE, DOT_SEP, fnSymTab(currentG.symtab))
     currentG._consumeToken(f, token.indent)
     stack.push(f)
-    dp = ParametersGp(f, token, f.symtab)
+    dp = ParametersGrp(f, token, f.symtab)
     f._params = dp
     return stack.push(dp)
 
-class FuncOrStructGp(_PhrasesGrp):
+class FuncOrStructGrp(_PhrasesGrp):
     _isInteruptable = True
     _exactlyOneNameInPhrase = False
     _allowNLPhraseStart = True
@@ -1325,7 +1325,7 @@ class FuncOrStructGp(_PhrasesGrp):
         if self._unaryBinaryOrStruct == UNARY_OR_STRUCT:
             raise ProgrammerError()
         super()._finalise(tokenOrGroup)
-        if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGp):
+        if self._phrases and self._phrases[0] and isinstance(self._phrases[0][0], TypelangGrp):
             self._tRet = self._phrases[0][0]
             self._phrases[0].pop(0)
 
@@ -1357,7 +1357,7 @@ class FuncOrStructGp(_PhrasesGrp):
 
 
 
-class ParametersGp(_PhrasesGrp):
+class ParametersGrp(_PhrasesGrp):
 
     _isInteruptable = False
 
@@ -1374,7 +1374,7 @@ class ParametersGp(_PhrasesGrp):
         # lexer to simplify our job here but for the moment let's not make it more complex
         phrase = self._tokens
         for token in phrase:
-            if isinstance(token, TypelangGp):
+            if isinstance(token, TypelangGrp):
                 raise GroupError(
                     f'The type for a parameter must be specified after a `:` not with `<:...>`, i.e. not "{token}" - {token.l1}:{token.l2}',
                     ErrSite(self.__class__, "Param type must not be <:...>"),
@@ -1400,20 +1400,20 @@ class ParametersGp(_PhrasesGrp):
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
                 )
-            phrase2 = [ParameterGp(self, tok1, [], self.symtab)]
+            phrase2 = [ParameterGrp(self, tok1, [], self.symtab)]
         else:
             tok1 = phrase[0]
             if tok1.tag == BIND_LEFT:
                 # fred:num or fred: num
                 newNameToken = Token(tok1.srcId, tok1.src, NAME, tok1.indent, tok1.t, tok1.l1, tok1.l2, tok1.c1, tok1.c2, tok1.s1, tok1.s2)
-                phrase2 = [ParameterGp(self, newNameToken, phrase[1:], self.symtab)]
+                phrase2 = [ParameterGrp(self, newNameToken, phrase[1:], self.symtab)]
             elif tok1.tag == NAME and (secondToken := phrase[1]).tag == BIND_RIGHT:
                 # fred :num
                 firstTypeName = Token(tok1.srcId, secondToken.src, NAME, secondToken.indent, secondToken.t, secondToken.l1, secondToken.l2, secondToken.c1, secondToken.c2, secondToken.s1, secondToken.s2)
-                phrase2 = [ParameterGp(self, tok1, [firstTypeName] + phrase[2:], self.symtab)]
+                phrase2 = [ParameterGrp(self, tok1, [firstTypeName] + phrase[2:], self.symtab)]
             elif len(phrase) >= 3 and tok1.tag == NAME and phrase[1].tag == COLON and phrase[2].tag == NAME:
                 # fred : name
-                phrase2 = [ParameterGp(self, tok1, phrase[2:], self.symtab)]
+                phrase2 = [ParameterGrp(self, tok1, phrase[2:], self.symtab)]
             else:
                 raise GroupError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
@@ -1461,7 +1461,7 @@ class ParametersGp(_PhrasesGrp):
         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
 
 
-class ParameterGp(_Phrase):
+class ParameterGrp(_PhraseGrp):
     _isInteruptable = False
     __slots__ = ['nameToken', 'typePhrase', 'tl']
     def __init__(self, parent, nameToken, typePhrase, symtab):
@@ -1486,14 +1486,14 @@ class ParameterGp(_Phrase):
 
 def catchLParenBracket(token, currentG, stack):
     if not (token.tag == L_PAREN_BRACKET): return Missing
-    t = FrameGp(currentG, token, currentG.symtab)
+    t = FrameGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(t, token.indent)
     stack.push(t)
-    k = FrameKeysGp(t, token, t.symtab)
+    k = FrameKeysGrp(t, token, t.symtab)
     t._keys = k
     return stack.push(k)
 
-class FrameGp(_PhrasesGrp):
+class FrameGrp(_PhrasesGrp):
     _exactlyOneNameInPhrase = True
     _allowNLPhraseStart = False
     _isInteruptable = False
@@ -1515,7 +1515,7 @@ class FrameGp(_PhrasesGrp):
     def PPDebug(self):
         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
 
-class FrameKeysGp(_PhrasesGrp):
+class FrameKeysGrp(_PhrasesGrp):
     _exactlyOneNameInPhrase = True
     _allowNLPhraseStart = False
     _isInteruptable = False
@@ -1541,11 +1541,11 @@ class FrameKeysGp(_PhrasesGrp):
 
 def catchLAngleColon(token, currentG, stack):
     if not (token.tag == L_ANGLE_COLON): return Missing
-    tlg = TypelangGp(currentG, token, currentG.symtab)
+    tlg = TypelangGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(tlg, token.indent)
     return stack.push(tlg)
 
-class TypelangGp(_Phrase):
+class TypelangGrp(_PhraseGrp):
     _isInteruptable = False
     __slots__ = ['tl']
     def __init__(self, parent, opener, symtab):
@@ -1598,7 +1598,7 @@ class TypelangGp(_Phrase):
 def catchKeyword(token, currentG, stack):
     if token.tag != KEYWORD_OR_BIND_LEFT:
         return Missing
-    if len(currentG._tokens) == 0 or isinstance(currentG, ParameterGp):
+    if len(currentG._tokens) == 0 or isinstance(currentG, ParameterGrp):
         # either there's nothing to the left so it can't be a keyword call, or we're parsing parameters for a function
         return Missing
     # if the potential keyword is on the same line then ok, or if it adds at least MIN_INDENT to
@@ -1606,7 +1606,7 @@ def catchKeyword(token, currentG, stack):
     indentOverFirstToken = token.indent - currentG._tokens[0].indent
     if (currentG._tokens[0].l2 != token.l2) and not (indentOverFirstToken >= MIN_INDENT):
         return Missing
-    ketg = _KeywordGp(currentG, token, currentG.symtab)
+    ketg = _KeywordGrp(currentG, token, currentG.symtab)
     return stack.push(ketg)
 
 
@@ -1621,7 +1621,7 @@ def lastKv(d):
 def atIfNonePut(d, k, v):
     return d.setdefault(k, v)
 
-class _KeywordGp(_PhrasesGrp):
+class _KeywordGrp(_PhrasesGrp):
     # catches a sequence of {[BIND_LEFT,] ARG_PHRASE, {KEYWORD_OR_BIND_LEFT, ARG_PHRASE}}
     # _keywordTokens catches each KEYWORD_OR_BIND_LEFT and _phrases catches each ARG_PHRASE
     # replaces the _tokens in the parent with {NAME, TUPLE (of args)}
@@ -1704,7 +1704,7 @@ class _KeywordGp(_PhrasesGrp):
     def __init__(self, parent, opener, symtab):
         super().__init__(parent, opener, NO_SEP, NOTE_EMPTY, symtab)
         # temporarily steal the _tokens from the parent group and set theirs to missing
-        # this will cause an error if we don't code _KeywordGp correctly acting as a bug detector :)
+        # this will cause an error if we don't code _KeywordGrp correctly acting as a bug detector :)
         parentTokens = parent._tokens
         parent._tokens = Missing
         self._phraseIndent = parentTokens[0].indent
@@ -1773,7 +1773,7 @@ class _KeywordGp(_PhrasesGrp):
         phraseForParent << newNameToken
 
         # add (<args>)
-        args = TupParenOrDestructureGp(self.parent, self._startTok, False, self.symtab)
+        args = TupParenOrDestructureGrp(self.parent, self._startTok, False, self.symtab)
         row = _CommaSepDotSepGL()
         for phrase in self._phrases:
             for tokenOrGroup in phrase:
@@ -1812,11 +1812,11 @@ class _KeywordGp(_PhrasesGrp):
 
 def catchLoad(token, currentG, stack):
     if not (token.tag == NAME and token.src == 'load'): return Missing
-    lg = LoadGp(currentG, token, currentG.symtab)
+    lg = LoadGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(lg, token.indent)
     return stack.push(lg)
 
-class LoadGp(_PhrasesGrp):
+class LoadGrp(_PhrasesGrp):
     # load sdf.sdf.sdf, sdf.sdf   -> list of modules to load into the kernel
 
     _exactlyOneNameInPhrase = False
@@ -1886,8 +1886,8 @@ class LoadGp(_PhrasesGrp):
 
         elif tokenOrGroup.tag in (SEMI_COLON, KEYWORD_OR_BIND_LEFT, BIND_RIGHT):
             raise GroupError(
-                f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in load - better error msg needed',
-                ErrSite(self.__class__, f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in load)'),
+                f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load - better error msg needed',
+                ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load)'),
                 self, tokenOrGroup
             )
 
@@ -1935,7 +1935,7 @@ class LoadGp(_PhrasesGrp):
                 )
 
         else:
-            raise ProgrammerError(f'{prettyNameByTag(tokenOrGroup.tag)} hasn\'t been handled')
+            raise ProgrammerError(f'{prettyNameByTag[tokenOrGroup.tag]} hasn\'t been handled')
 
         self._lastLineBreakAndIndent = stateToStore
         return self
@@ -1948,11 +1948,11 @@ class LoadGp(_PhrasesGrp):
 
 def catchFromImport(token, currentG, stack):
     if not (token.tag == NAME and token.src == 'from'): return Missing
-    fig = FromImportGp(currentG, token, currentG.symtab)
+    fig = FromImportGrp(currentG, token, currentG.symtab)
     currentG._consumeToken(fig, token.indent)
     return stack.push(fig)
 
-class FromImportGp(_PhrasesGrp):
+class FromImportGrp(_PhrasesGrp):
 
     _exactlyOneNameInPhrase = False
     _isInteruptable = False
@@ -1966,7 +1966,7 @@ class FromImportGp(_PhrasesGrp):
         self._awaitingTokensPostComma = False
 
     def _processCloserOrAnswerError(self, token):
-        return "FromImportGp doesn't take a closer"
+        return "FromImportGrp doesn't take a closer"
         # self._finalise(token)
         # return self.parent._processCloserOrAnswerError(token)
 
@@ -2096,8 +2096,8 @@ class FromImportGp(_PhrasesGrp):
 
         elif tokenOrGroup.tag == SEMI_COLON:
             raise GroupError(
-                f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in from import - better error msg needed',
-                ErrSite(self.__class__, f'{prettyNameByTag(tokenOrGroup.tag)} not allowed in from import'),
+                f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in from import - better error msg needed',
+                ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in from import'),
                 self, tokenOrGroup
             )
 
@@ -2319,32 +2319,32 @@ handlersByErrSiteId.update({
     ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #7') : '...',
     ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
 
-    ('bones.parse.parse_groups', 'FromImportGp', '_consumeToken', 'requires import after path') : '...',
+    ('bones.parse.parse_groups', 'FromImportGrp', '_consumeToken', 'requires import after path') : '...',
 
-    ('bones.parse.parse_groups', 'LoadGp', '_finalise', 'requires - no items specified') : '...',
-    ('bones.parse.parse_groups', 'LoadGp', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
-    ('bones.parse.parse_groups', 'LoadGp', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.parse.parse_groups', 'LoadGrp', '_finalise', 'requires - no items specified') : '...',
+    ('bones.parse.parse_groups', 'LoadGrp', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.parse.parse_groups', 'LoadGrp', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
 
-    ('bones.parse.parse_groups', 'ParametersGp', '_finishPhrase', 'no args') : '...',
-    ('bones.parse.parse_groups', 'ParametersGp', '_finishPhrase', 'Param type must not be <:...>') : '...',
-    ('bones.parse.parse_groups', 'ParametersGp', '_consumeToken', 'assign right') : '...',
+    ('bones.parse.parse_groups', 'ParametersGrp', '_finishPhrase', 'no args') : '...',
+    ('bones.parse.parse_groups', 'ParametersGrp', '_finishPhrase', 'Param type must not be <:...>') : '...',
+    ('bones.parse.parse_groups', 'ParametersGrp', '_consumeToken', 'assign right') : '...',
 
     ('bones.parse.parse_groups', 'SnippetGrp', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
     ('bones.parse.parse_groups', 'SnippetGrp', '_commaEncountered', 'COMMA not valid in snippet') : '...',
     ('bones.parse.parse_groups', 'SnippetGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.parse.parse_groups', 'FrameGp', '_dotEncountered', 'DOT not valid in group') : '...',
-    ('bones.parse.parse_groups', 'FrameGp', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.parse.parse_groups', 'FrameGp', '_finishPhrase', 'Illegal new line') : '...',
+    ('bones.parse.parse_groups', 'FrameGrp', '_dotEncountered', 'DOT not valid in group') : '...',
+    ('bones.parse.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.parse.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal new line') : '...',
 
-    ('bones.parse.parse_groups', 'FrameKeysGp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.parse.parse_groups', 'FrameKeysGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.parse.parse_groups', 'TupParenOrDestructureGp', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
-    ('bones.parse.parse_groups', 'TypelangGp', '_finalise', '_finalise') : '',
+    ('bones.parse.parse_groups', 'TupParenOrDestructureGrp', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
+    ('bones.parse.parse_groups', 'TypelangGrp', '_finalise', '_finalise') : '',
 
-    ('bones.parse.parse_groups', 'FuncOrStructGp', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGp', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGp', '_commaEncountered', 'illegal COMMA in function body') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGp', '_processCloserOrAnswerError', 'null struct') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGp', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
+    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
+    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_commaEncountered', 'illegal COMMA in function body') : '...',
+    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'null struct') : '...',
+    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
 })

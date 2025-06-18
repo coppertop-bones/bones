@@ -72,7 +72,7 @@ class TCInterpreter:
                 raise ProgrammerError()
 
             if isinstance(fn, (tcfunc, tcblock)):
-                return fn(*args)
+                return self.ex(fn)(*args)
 
             elif isinstance(fn, _tvfunc):
                 if fn.pass_tByT:

@@ -29,12 +29,12 @@ from bones.parse.lex import Token, prettyNameByTag, \
     NAME, SYMBOLIC_NAME, BIND_RIGHT, BIND_LEFT, \
     PARENT_VALUE_NAME, \
     CONTEXT_NAME, CONTEXT_BIND_RIGHT, \
-    GLOBAL_NAME, GLOBAL_BIND_RIGHT, KEYWORD_OR_BIND_LEFT, SYMBOLIC_NAME, ELLIPSES
+    GLOBAL_NAME, GLOBAL_BIND_RIGHT, KEYWORD_OR_BIND_LEFT, ELLIPSES
 from bones.parse.parse_groups import \
-    LoadGp, FromImportGp, \
-    FuncOrStructGp, TupParenOrDestructureGp, BlockGp, \
-    TypelangGp, \
-    FrameGp, _SemiColonSepCommaSepDotSepGL, SemiColonSepCommaSep, _DotOrCommaSepGL, _CommaSepDotSepGL
+    LoadGrp, FromImportGrp, \
+    FuncOrStructGrp, TupParenOrDestructureGrp, BlockGrp, \
+    TypelangGrp, \
+    FrameGrp, _SemiColonSepCommaSepDotSepGL, SemiColonSepCommaSep, _DotOrCommaSepGL, _CommaSepDotSepGL
 from bones.kernel.symbol_table import VMeta, FnMeta, fnSymTab, blockSymTab
 from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
     tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
@@ -136,7 +136,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
                 return f, 1
         elif len(tokens) > 1:
             next = tokens[1]
-            if isinstance(next, TupParenOrDestructureGp):
+            if isinstance(next, TupParenOrDestructureGrp):
                 # e.g. fred(...)
                 tup = parseTupParenOrDestructureGroup(next, symtab, k)
                 tupleType = next.tupleType
@@ -188,7 +188,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 
     elif style is unary:
         # noun unary            (unary may have tuples afterward)
-        if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGp):
+        if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGrp):
             tup = parseTupParenOrDestructureGroup(postUnaryTok, symtab, k.sm)
             tupleType = postUnaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -216,7 +216,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
         # noun binary arg2          (binary and arg2 may have tuples afterward)
         if len(tokens) < 2: raise SentenceError("incomplete phrase - {noun, binary} is missing args after the binary")
         postBinaryTok = tokens[1]
-        if isinstance(postBinaryTok, TupParenOrDestructureGp):
+        if isinstance(postBinaryTok, TupParenOrDestructureGrp):
             tup = parseTupParenOrDestructureGroup(postBinaryTok, symtab, k.sm)
             tupleType = postBinaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -247,7 +247,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 
         # handle token after ternary
         tok = tokens[i]
-        if isinstance(tok, TupParenOrDestructureGp):
+        if isinstance(tok, TupParenOrDestructureGrp):
             tup = parseTupParenOrDestructureGroup(tok, symtab, k.sm)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -267,7 +267,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 
         # handle token after arg2
         tok = tokens[i]
-        if isinstance(tok, TupParenOrDestructureGp):
+        if isinstance(tok, TupParenOrDestructureGrp):
             tup = parseTupParenOrDestructureGroup(tok, symtab, k.sm)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
@@ -367,7 +367,7 @@ def parsePhrase(tokens, symtab, k):
                         raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
                     tcnode, numConsumed = buildFnApplication(tcnode, meta.symtab, name, symtab, tokens, k)
                     tokens >> numConsumed
-                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGp) and name in symtab.implicitParams:
+                elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGrp) and name in symtab.implicitParams:
                     if accessors:
                         raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
@@ -495,7 +495,7 @@ def parsePhrase(tokens, symtab, k):
 
         else:
 
-            if isinstance(t, FuncOrStructGp):
+            if isinstance(t, FuncOrStructGrp):
                 # {[x:tArg1, y:tArg2] <:tRet> x + y}, {x + y}, etc
                 if t._unaryBinaryOrStruct == STRUCT:
                     # create the tclitstruct and the struct type
@@ -537,16 +537,16 @@ def parsePhrase(tokens, symtab, k):
                     tcnode, numConsumed = buildFnApplication(tcnode, Missing, f, symtab, tokens[0:], k.sm)
                     tokens >> numConsumed
 
-            elif isinstance(t, TupParenOrDestructureGp):
+            elif isinstance(t, TupParenOrDestructureGrp):
                 if tcnode is Missing:
                     if t.tupleType == DESTRUCTURE:
-                        raise NotYetImplemented('TupParenOrDestructureGp.tupleType == DESTRUCTURE')
+                        raise NotYetImplemented('TupParenOrDestructureGrp.tupleType == DESTRUCTURE')
                     if t.tupleType == TUPLE_OR_PAREN:
                         # if TUPLE_OR_PAREN then of form `(a)` - is it a tuple of one element or a parenthesis?
                         # for the moment we will assume a parenthesis -> 1 entup to make a one tuple? like q
                         pass
                     if t.tupleType == TUPLE_2D:
-                        raise NotYetImplemented('TupParenOrDestructureGp.tupleType == TUPLE_2D')
+                        raise NotYetImplemented('TupParenOrDestructureGrp.tupleType == TUPLE_2D')
                     else:
                         vs, ts = [], []
                         innertcnodes = parseTupParenOrDestructureGroup(t, symtab, k)
@@ -582,7 +582,7 @@ def parsePhrase(tokens, symtab, k):
                     else:
                         raise ProgrammerError()
 
-            elif isinstance(t, BlockGp):
+            elif isinstance(t, BlockGrp):
                 # OPEN: handle this case with dots in
                 # direction case: [[d]
                 #     d == `up,     y: y + 1. opCount: opCount + 1;
@@ -608,10 +608,10 @@ def parsePhrase(tokens, symtab, k):
                 tcnode = tcblock(t.tok1, t.tok1, blockSt, argnames, BTTuple(*tArgs), tRetGrid[0][0], bodyGrid[0][0])
                 tokens >> 1
 
-            elif isinstance(t, FrameGp):
+            elif isinstance(t, FrameGrp):
                 raise NotYetImplemented()
 
-            elif isinstance(t, LoadGp):
+            elif isinstance(t, LoadGrp):
                 # i.e. searches PYTHON_PATH and BONES_PATH for bones/ex/ and load core.py or core.b
                 paths = []
                 for phrase in t.phrases:
@@ -621,7 +621,7 @@ def parsePhrase(tokens, symtab, k):
                 k.loadModules(tcnode.paths)
                 tokens >> 1
 
-            elif isinstance(t, FromImportGp):
+            elif isinstance(t, FromImportGrp):
                 names = []
                 for phr in t.phrases:
                     name = ''
@@ -640,7 +640,7 @@ def parsePhrase(tokens, symtab, k):
                 k.importSymbols(tcnode.path, tcnode.names, tcnode.symtab)
                 tokens >> 1
 
-            elif isinstance(t, TypelangGp):
+            elif isinstance(t, TypelangGrp):
                 tcnode = tclitbtype(t.tok1, t.tok2, symtab, BType(t.tl))
                 tokens >> 1
 
