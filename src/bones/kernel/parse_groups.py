@@ -235,15 +235,15 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 from coppertop.pipe import coppertop
 from coppertop.dm.pp import PP, EE
 
-from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented
 from bones.core.sentinels import Missing
-from bones.core.errors import ErrSite
-from bones.core.errors import GroupError
+from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented, \
+    ErrSite
+from bones.kernel.errors import BonesGroupingError
 from bones.kernel.tc import tcnode
-from bones.kernel.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
+from bones.kernel._core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 from bones.kernel.symbol_table import fnSymTab
 
-from bones.parse.lex import prettyNameByTag, Token, \
+from bones.kernel.lex import prettyNameByTag, Token, \
     L_ANGLE_COLON, L_PAREN, L_BRACKET, L_BRACE, R_ANGLE, R_PAREN, R_BRACKET, \
     R_BRACE, COMMA, L_PAREN_BRACKET, L_BRACE_BRACKET, KEYWORD_OR_BIND_LEFT, LINE_COMMENT, \
     INLINE_COMMENT, BREAKOUT, CONTINUATION, LINE_BREAK, SEMI_COLON, COLON, DOT, \
@@ -368,7 +368,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
                         # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
                         f'{currentG.l1}:{currentG.c1} to {token.l2}:{token.c2}' >> EE
                         got = prettyNameByTag[token.tag]
-                        raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentG, token)
+                        raise BonesGroupingError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentG, token)
                     consumer = currentG
                     if TRACE:
                         f"{currentG.PPDebug} << {PPDebug(token)} .3" >> PP
@@ -392,7 +392,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
                     # TODO identify location of both opener and closer and maybe also print the relevant lines of source?
                     f'{currentG.l1}:{currentG.c1} to {token.l2}:{token.c2}' >> EE
                     got = prettyNameByTag[token.tag]
-                    raise GroupError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentG, token)
+                    raise BonesGroupingError('Wanted %s got %s - %s' % (wanted, got, token), ErrSite("wanted got"), currentG, token)
                 consumer = currentG
             if opener:
                 consumer = opener(token, currentG, stack)
@@ -402,7 +402,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
                         f"{currentG.PPDebug} << {PPDebug(token)} .5" >> PP
 
         if consumer is Missing:
-            raise GroupError('Unhandled token %s' % str(token), ErrSite("Unhandled token"), currentG, token)
+            raise BonesGroupingError('Unhandled token %s' % str(token), ErrSite("Unhandled token"), currentG, token)
 
         # pop groups off the stack that have finished consuming tokens
         while currentG._tokens is Missing:
@@ -509,7 +509,7 @@ class _Group:
             # check we are NOT at start of phrase
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
-                raise GroupError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
+                raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
             self.symtab.noteSets(tokenOrGroup.src, LOCAL_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
@@ -517,7 +517,7 @@ class _Group:
             # check we are NOT at start of phrase
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
-                raise GroupError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
+                raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
             self.symtab.noteSets(tokenOrGroup.src, CONTEXT_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
@@ -525,7 +525,7 @@ class _Group:
             # check we are NOT at start of phrase
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
-                raise GroupError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
+                raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
             self.symtab.noteSets(tokenOrGroup.src, GLOBAL_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
@@ -741,7 +741,7 @@ class _PhrasesGrp(_Group):
                     pass
                 else:
                     if not self._allowNLPhraseStart:
-                        raise GroupError(
+                        raise BonesGroupingError(
                             f'Illegal new line',
                             ErrSite(self.__class__, 'Illegal new line'),
                             self, tokenOrGroup
@@ -766,7 +766,7 @@ class _PhrasesGrp(_Group):
                     self._phrases << Missing # Token(nextTok.srcId, '', NULL, nextTok.indent, -1, nextTok.l1, nextTok.l1, nextTok.c1, nextTok.c1, nextTok.s1, nextTok.s1)
                     self._numEmpty += 1
                 elif self._emptyPolicy == ERR_ON_EMPTY:
-                    raise GroupError(
+                    raise BonesGroupingError(
                         f'Illegal empty phrase',
                         ErrSite(self.__class__, 'Illegal empty phrase'),
                         self, tokenOrGroup
@@ -917,13 +917,13 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
     if len(phrase) == 1:
         if isinstance(phrase[0], Token):
             if phrase[0].tag == BIND_LEFT:
-                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #1"), group, tokenOrGroup)
+                raise BonesGroupingError("Syntax error", ErrSite("_processAssigmentsInPhrase #1"), group, tokenOrGroup)
             elif phrase[0].tag == CONTEXT_BIND_LEFT:
-                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #2"), group, tokenOrGroup)
+                raise BonesGroupingError("Syntax error", ErrSite("_processAssigmentsInPhrase #2"), group, tokenOrGroup)
             elif phrase[0].tag == GLOBAL_BIND_LEFT:
-                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #3"), group, tokenOrGroup)
+                raise BonesGroupingError("Syntax error", ErrSite("_processAssigmentsInPhrase #3"), group, tokenOrGroup)
             elif isinstance(phrase[0], TupParenOrDestructureGrp) and phrase[0]._isDestructure:
-                raise GroupError("Syntax error", ErrSite("_processAssigmentsInPhrase #4"), group, tokenOrGroup)
+                raise BonesGroupingError("Syntax error", ErrSite("_processAssigmentsInPhrase #4"), group, tokenOrGroup)
 
     elif len(phrase) >= 2:
         if isinstance(phrase[0], Token):
@@ -997,7 +997,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, symtab)
                         symtab.defFnMeta(varName, TBI, CONTEXT_SCOPE)
                     elif isinstance(group, FuncOrStructGrp):
-                        raise GroupError("Can't context assign with frame group", ErrSite("_processAssigmentsInPhrase #5"), group, tokenOrGroup)
+                        raise BonesGroupingError("Can't context assign with frame group", ErrSite("_processAssigmentsInPhrase #5"), group, tokenOrGroup)
                     else:
                         symtab.defVMeta(varName, TBI, CONTEXT_SCOPE)
                 elif each.tag == GLOBAL_BIND_RIGHT:
@@ -1007,14 +1007,14 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
                         _checkStyle(prior, varName, symtab)
                         symtab.defFnMeta(varName, TBI, GLOBAL_SCOPE)
                     elif isinstance(group, FuncOrStructGrp):
-                        raise GroupError("Can't global assign with frame group", ErrSite("_processAssigmentsInPhrase #6"), group, tokenOrGroup)
+                        raise BonesGroupingError("Can't global assign with frame group", ErrSite("_processAssigmentsInPhrase #6"), group, tokenOrGroup)
                     else:
                         symtab.defVMeta(varName, TBI, GLOBAL_SCOPE)
                     symtab.defVMeta(varName, TBI, GLOBAL_SCOPE)
             except NotYetImplemented as ex:
                 raise
             except Exception as ex:
-                raise GroupError(f"l1: {repr(group)} l2: {group.l2}", ErrSite("_processAssigmentsInPhrase #7"), group, tokenOrGroup) from ex
+                raise BonesGroupingError(f"l1: {repr(group)} l2: {group.l2}", ErrSite("_processAssigmentsInPhrase #7"), group, tokenOrGroup) from ex
         elif isinstance(each, TupParenOrDestructureGrp) and each._isDestructure:
             numNames += len(each.grid[0])
         if isinstance(each, TypelangGrp):
@@ -1023,7 +1023,7 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
             prior = each
 
     if exactlyOneNameInPhrase and numNames != 1:
-        raise GroupError(
+        raise BonesGroupingError(
             f"Exactly one name must be provided, but {numNames} were found",
             ErrSite('exactlyOneNameInPhrase and numNames != 1'),
             group, tokenOrGroup
@@ -1048,13 +1048,13 @@ class SnippetGrp(_PhrasesGrp):
         self._finishPhrase(Missing, SECTION_END, tokenOrGroup)
         super()._finalise(tokenOrGroup)
     def _commaEncountered(self, tokenOrGroup):
-        raise GroupError(
+        raise BonesGroupingError(
             f'COMMA not valid in snippet - {tokenOrGroup.l1}:{tokenOrGroup.l2}',
             ErrSite(self.__class__, 'COMMA not valid in snippet'),
             self, tokenOrGroup
         )
     def _semicolonEncountered(self, tokenOrGroup):
-        raise GroupError(
+        raise BonesGroupingError(
             f'SEMI_COLON not valid in snippet - {tokenOrGroup.l1}:{tokenOrGroup.l2}',
             ErrSite(self.__class__, 'SEMI_COLON not valid in snippet'),
             self, tokenOrGroup
@@ -1250,7 +1250,7 @@ class FuncOrStructGrp(_PhrasesGrp):
             self._hasDot                                        # has a dot so it's a function
         ):
             f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
-            raise GroupError(
+            raise BonesGroupingError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in function body"),
                 self, tokenOrGroup
@@ -1260,7 +1260,7 @@ class FuncOrStructGrp(_PhrasesGrp):
                 self._tokens[0].tag != BIND_LEFT           # having a comma without an assign left is illegal
         ):
             f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
-            raise GroupError(
+            raise BonesGroupingError(
                 "Illegal comma encountered in function body",
                 ErrSite(self.__class__, "illegal COMMA in {}"),
                 self, tokenOrGroup
@@ -1272,7 +1272,7 @@ class FuncOrStructGrp(_PhrasesGrp):
 
     def _semicolonEncountered(self, tokenOrGroup):
         f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
-        raise GroupError(
+        raise BonesGroupingError(
             "Semi-colon encountered in function body",
             ErrSite(self.__class__, "illegal SEMI_COLON in function body"),
             self, tokenOrGroup
@@ -1285,7 +1285,7 @@ class FuncOrStructGrp(_PhrasesGrp):
         isAssignLeft = currentPhrase and isinstance(currentPhrase[0], Token) and currentPhrase[0].tag == BIND_LEFT
         numPhrases = (1 if currentPhrase else 0) + len(self._phrases)
         if numPhrases == 0:
-            raise GroupError(
+            raise BonesGroupingError(
                 "empty struct/function not allowed",
                 ErrSite(self.__class__, "null struct"),
                 self, token
@@ -1301,7 +1301,7 @@ class FuncOrStructGrp(_PhrasesGrp):
                     self._phrases.sep('.')
             elif self._unaryBinaryOrStruct == BINARY:
                 if isAssignLeft:
-                    raise GroupError(
+                    raise BonesGroupingError(
                         "empty struct/function not allowed",
                         ErrSite(self.__class__, "assign left in single phrase binary"),
                         self, token
@@ -1375,13 +1375,13 @@ class ParametersGrp(_PhrasesGrp):
         phrase = self._tokens
         for token in phrase:
             if isinstance(token, TypelangGrp):
-                raise GroupError(
+                raise BonesGroupingError(
                     f'The type for a parameter must be specified after a `:` not with `<:...>`, i.e. not "{token}" - {token.l1}:{token.l2}',
                     ErrSite(self.__class__, "Param type must not be <:...>"),
                     self, token
                 )
         if len(phrase) == 0:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'{{[] has no arguments @{self.l1}:{self.c1}',
                 ErrSite(self.__class__, "no args"),
                 self, Missing
@@ -1389,13 +1389,13 @@ class ParametersGrp(_PhrasesGrp):
         elif len(phrase) == 1:
             tok1 = phrase[0]
             if tok1.tag == BIND_LEFT:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'{{[... {tok1.src} is missing type @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "missing type"),
                     self, tok1
                 )
             elif tok1.tag != NAME:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
@@ -1415,7 +1415,7 @@ class ParametersGrp(_PhrasesGrp):
                 # fred : name
                 phrase2 = [ParameterGrp(self, tok1, phrase[2:], self.symtab)]
             else:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'{{[... contains {tok1.src} which is not a name @{self.l1}:{self.c1}',
                     ErrSite(self.__class__, "not a name"),
                     self, tok1
@@ -1432,7 +1432,7 @@ class ParametersGrp(_PhrasesGrp):
     def _finalise(self, tokenOrGroup):
         if self._tokens is Missing: raise ProgrammerError()
         if len(self._phrases) == 0:
-            raise GroupError(
+            raise BonesGroupingError(
                 'No parameters in list',
                 ErrSite(self.__class__, 'No parameters in list'),
                 self, Missing
@@ -1440,7 +1440,7 @@ class ParametersGrp(_PhrasesGrp):
         for phrase in self._phrases:
             # [a :int, b] is max allowed (i.e. 2 tokens - a name and a type)
             if phrase is not Missing and (len(phrase) < 1 or len(phrase) > 3):
-                raise GroupError(
+                raise BonesGroupingError(
                     'Parameters can only be one assigment expression each or a name',
                     ErrSite(self.__class__, 'only one assigment'),
                     self, phrase
@@ -1562,7 +1562,7 @@ class TypelangGrp(_PhraseGrp):
         self._finalise(token)
     def _finishPhrase(self, indent, cause, tokenOrGroup):
         f"{tokenOrGroup.l1}:{tokenOrGroup.c1} to {tokenOrGroup.l2}:{tokenOrGroup.c2}" >> EE
-        raise GroupError(
+        raise BonesGroupingError(
             "??? in _finishPhrase",
             ErrSite(self.__class__, "_finishPhrase"),
             self, tokenOrGroup
@@ -1572,7 +1572,7 @@ class TypelangGrp(_PhraseGrp):
     def _finalise(self, tokenOrGroup):
         try:
             if not self._isComplete:
-                raise GroupError(
+                raise BonesGroupingError(
                     "missing closer (\">\") for typelang group",
                     ErrSite(self.__class__, "_finalise"),
                     group=self,
@@ -1687,7 +1687,7 @@ class _KeywordGrp(_PhrasesGrp):
                 self._latestToken = tokenOrGroup
             elif tokenOrGroup.tag == BIND_RIGHT:
                 if not self._tokens:
-                    raise GroupError(
+                    raise BonesGroupingError(
                         'AssignRight not only allowed at start of expression - %s',
                         ErrSite(self.__class__, 'AssignRight'),
                         self, tokenOrGroup
@@ -1716,7 +1716,7 @@ class _KeywordGrp(_PhrasesGrp):
             self._assignLeftOrMissing = parentTokens[0]
             firstArg = _TokensGL() + parentTokens[1:]
             if not firstArg:
-                raise GroupError(
+                raise BonesGroupingError(
                     'Double assign left',
                     ErrSite(self.__class__, 'Double assign left'),
                     self, opener
@@ -1839,13 +1839,13 @@ class LoadGrp(_PhrasesGrp):
             self._phrases << self._tokens
             self._tokens = _TokensGL()
         if len(self._phrases) == 0:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'requires - no items specified - needs better error msg',
                 ErrSite(self.__class__, 'requires - no items specified'),
                 self, Missing
             )
         if self._awaitingTokens:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'Encountered GROUP_END without a NAME - better error msg needed',
                 ErrSite(self.__class__, 'Encountered GROUP_END without a NAME'),
                 self, tokenOrGroup
@@ -1871,21 +1871,21 @@ class LoadGrp(_PhrasesGrp):
         stateToStore = Missing
 
         if not isinstance(tokenOrGroup, Token):
-            raise GroupError(
+            raise BonesGroupingError(
                 'No groups allowed in load - better error msg needed',
                 ErrSite(self.__class__, 'No groups allowed in load'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag is BREAKOUT:
-            raise GroupError(
+            raise BonesGroupingError(
                 'No breakouts allowed in load - better error msg needed',
                 ErrSite(self.__class__, 'No breakouts allowed in load'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag in (SEMI_COLON, KEYWORD_OR_BIND_LEFT, BIND_RIGHT):
-            raise GroupError(
+            raise BonesGroupingError(
                 f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load - better error msg needed',
                 ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load)'),
                 self, tokenOrGroup
@@ -1913,7 +1913,7 @@ class LoadGrp(_PhrasesGrp):
 
         elif tokenOrGroup.tag is COMMA:
             if self._awaitingTokens:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'Encountered COMMA without a NAME - better error msg needed',
                     ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
                     self, tokenOrGroup
@@ -1928,7 +1928,7 @@ class LoadGrp(_PhrasesGrp):
                 self._appendToken(tokenOrGroup, indent)
                 self._awaitingTokens = False
             else:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'Encountered a NAME or TEXT without a COMMA - better error msg needed',
                     ErrSite(self.__class__, 'Encountered NAME without a COMMA'),
                     self, tokenOrGroup
@@ -1973,13 +1973,13 @@ class FromImportGrp(_PhrasesGrp):
     def _finalise(self, tokenOrGroup):
         if self._tokens: self._finishPhrase(Missing, SECTION_END, tokenOrGroup)
         if len(self._phrases) == 0:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'requires - no items specified - needs better error msg',
                 ErrSite(self.__class__, 'from import - no items specified'),
                 self, Missing
             )
         if self._awaitingTokensPostComma:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'requires - missing items after last comma - needs better error msg',
                 ErrSite(self.__class__, 'from import - missing items after last comma'),
                 self, Missing
@@ -2018,7 +2018,7 @@ class FromImportGrp(_PhrasesGrp):
                 if tokenOrGroup.tag == NAME and tokenOrGroup.src == "import":
                     self._seenImport = True
                     return self
-                raise GroupError(
+                raise BonesGroupingError(
                     f'requires "import" after the path',
                     ErrSite(self.__class__, 'requires import after path'),
                     self, Missing
@@ -2063,14 +2063,14 @@ class FromImportGrp(_PhrasesGrp):
             self._phraseState = NOT_ENDING
 
         if not isinstance(tokenOrGroup, Token):
-            raise GroupError(
+            raise BonesGroupingError(
                 'No groups allowed in from import - better error msg needed',
                 ErrSite(self.__class__, 'No groups allowed in from import'),
                 self, tokenOrGroup
             )
 
         elif tokenOrGroup.tag is BREAKOUT:
-            raise GroupError(
+            raise BonesGroupingError(
                 'No breakouts allowed in from import - better error msg needed',
                 ErrSite(self.__class__, 'No breakouts allowed in from import'),
                 self, tokenOrGroup
@@ -2088,14 +2088,14 @@ class FromImportGrp(_PhrasesGrp):
                 self._startNewPhrase()
                 self._awaitingTokensPostComma = True
             else:
-                raise GroupError(
+                raise BonesGroupingError(
                     f'Encountered COMMA without a NAME - better error msg needed',
                     ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
                     self, tokenOrGroup
                 )
 
         elif tokenOrGroup.tag == SEMI_COLON:
-            raise GroupError(
+            raise BonesGroupingError(
                 f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in from import - better error msg needed',
                 ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in from import'),
                 self, tokenOrGroup
@@ -2307,44 +2307,44 @@ def pairwise(iterable):
 
 
 handlersByErrSiteId.update({
-    ('bones.parse.parse_groups', Missing, 'parseStructure', 'Unhandled token') : '...',
-    ('bones.parse.parse_groups', Missing, 'parseStructure', 'wanted got') : '...',
+    ('bones.kernel.parse_groups', Missing, 'parseStructure', 'Unhandled token') : '...',
+    ('bones.kernel.parse_groups', Missing, 'parseStructure', 'wanted got') : '...',
 
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #1'): '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #2') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #3') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #4') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #5') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #6') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #7') : '...',
-    ('bones.parse.parse_groups', Missing, '_processAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #1'): '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #2') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #3') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #4') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #5') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #6') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', '_processAssigmentsInPhrase #7') : '...',
+    ('bones.kernel.parse_groups', Missing, '_processAssigmentsInPhrase', 'exactlyOneNameInPhrase and numNames != 1') : '...',
 
-    ('bones.parse.parse_groups', 'FromImportGrp', '_consumeToken', 'requires import after path') : '...',
+    ('bones.kernel.parse_groups', 'FromImportGrp', '_consumeToken', 'requires import after path') : '...',
 
-    ('bones.parse.parse_groups', 'LoadGrp', '_finalise', 'requires - no items specified') : '...',
-    ('bones.parse.parse_groups', 'LoadGrp', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
-    ('bones.parse.parse_groups', 'LoadGrp', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.kernel.parse_groups', 'LoadGrp', '_finalise', 'requires - no items specified') : '...',
+    ('bones.kernel.parse_groups', 'LoadGrp', '_finalise', 'Encountered GROUP_END without a NAME') : '...',
+    ('bones.kernel.parse_groups', 'LoadGrp', '_consumeToken', 'Encountered GROUP_END without a NAME') : '...',
 
-    ('bones.parse.parse_groups', 'ParametersGrp', '_finishPhrase', 'no args') : '...',
-    ('bones.parse.parse_groups', 'ParametersGrp', '_finishPhrase', 'Param type must not be <:...>') : '...',
-    ('bones.parse.parse_groups', 'ParametersGrp', '_consumeToken', 'assign right') : '...',
+    ('bones.kernel.parse_groups', 'ParametersGrp', '_finishPhrase', 'no args') : '...',
+    ('bones.kernel.parse_groups', 'ParametersGrp', '_finishPhrase', 'Param type must not be <:...>') : '...',
+    ('bones.kernel.parse_groups', 'ParametersGrp', '_consumeToken', 'assign right') : '...',
 
-    ('bones.parse.parse_groups', 'SnippetGrp', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
-    ('bones.parse.parse_groups', 'SnippetGrp', '_commaEncountered', 'COMMA not valid in snippet') : '...',
-    ('bones.parse.parse_groups', 'SnippetGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.kernel.parse_groups', 'SnippetGrp', '_semicolonEncountered', 'SEMI_COLON not valid in snippet') : '...',
+    ('bones.kernel.parse_groups', 'SnippetGrp', '_commaEncountered', 'COMMA not valid in snippet') : '...',
+    ('bones.kernel.parse_groups', 'SnippetGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.parse.parse_groups', 'FrameGrp', '_dotEncountered', 'DOT not valid in group') : '...',
-    ('bones.parse.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.parse.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal new line') : '...',
+    ('bones.kernel.parse_groups', 'FrameGrp', '_dotEncountered', 'DOT not valid in group') : '...',
+    ('bones.kernel.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.kernel.parse_groups', 'FrameGrp', '_finishPhrase', 'Illegal new line') : '...',
 
-    ('bones.parse.parse_groups', 'FrameKeysGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.kernel.parse_groups', 'FrameKeysGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
 
-    ('bones.parse.parse_groups', 'TupParenOrDestructureGrp', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
-    ('bones.parse.parse_groups', 'TypelangGrp', '_finalise', '_finalise') : '',
+    ('bones.kernel.parse_groups', 'TupParenOrDestructureGrp', '_commaEncountered', 'COMMA not valid in _DotSepPhrases') : '...',
+    ('bones.kernel.parse_groups', 'TypelangGrp', '_finalise', '_finalise') : '',
 
-    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_commaEncountered', 'illegal COMMA in function body') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'null struct') : '...',
-    ('bones.parse.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
+    ('bones.kernel.parse_groups', 'FuncOrStructGrp', '_finishPhrase', 'Illegal empty phrase') : '...',
+    ('bones.kernel.parse_groups', 'FuncOrStructGrp', '_semicolonEncountered', 'illegal SEMI_COLON in function body'): '...',
+    ('bones.kernel.parse_groups', 'FuncOrStructGrp', '_commaEncountered', 'illegal COMMA in function body') : '...',
+    ('bones.kernel.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'null struct') : '...',
+    ('bones.kernel.parse_groups', 'FuncOrStructGrp', '_processCloserOrAnswerError', 'assign left in single phrase binary') : '...',
 })

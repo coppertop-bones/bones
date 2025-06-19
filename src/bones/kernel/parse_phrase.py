@@ -15,12 +15,12 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 from coppertop.pipe import nullary, unary, binary, ternary
-from bones.core.errors import ProgrammerError, NotYetImplemented, PathNotTested, SentenceError, ErrSite, \
-    DictionaryError
-from bones.core.sentinels import Missing, Null
+from bones.core.errors import ProgrammerError, NotYetImplemented, PathNotTested, ErrSite
+from bones.core.sentinels import Missing
 from bones.core.context import context
-from bones.kernel.core import RET_VAR_NAME
-from bones.parse.lex import Token, prettyNameByTag, \
+from bones.kernel._core import RET_VAR_NAME
+from bones.kernel.errors import BonesPhraseError, BonesUnknownNameError
+from bones.kernel.lex import Token, prettyNameByTag, \
     START, NULL, INTEGER, DECIMAL, SYM, SYMS, TEXT, \
     DATE, LOCALTIME_M, LOCALTIME_S, LOCALTIME_SS, \
     GLOBALTIME_M, GLOBALTIME_SS, GLOBALTIME_S, \
@@ -30,7 +30,7 @@ from bones.parse.lex import Token, prettyNameByTag, \
     PARENT_VALUE_NAME, \
     CONTEXT_NAME, CONTEXT_BIND_RIGHT, \
     GLOBAL_NAME, GLOBAL_BIND_RIGHT, KEYWORD_OR_BIND_LEFT, ELLIPSES
-from bones.parse.parse_groups import \
+from bones.kernel.parse_groups import \
     LoadGrp, FromImportGrp, \
     FuncOrStructGrp, TupParenOrDestructureGrp, BlockGrp, \
     TypelangGrp, \
@@ -39,9 +39,9 @@ from bones.kernel.symbol_table import VMeta, FnMeta, fnSymTab, blockSymTab
 from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
     tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
 from bones.ts.metatypes import BTTuple, BTStruct
-from bones.kernel.core import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
+from bones.kernel._core import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 from bones.lang.types import TBI, littup
-from bones.parse.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
+from bones.kernel.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
 from bones.ts.type_lang import TypeLangInterpreter
 from bones.ts.metatypes import BType
@@ -204,7 +204,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
                         break
                 return tcapply(tcnode.tok1, rhs, symtab, f, tup), 2
             else:
-                raise SentenceError("error needs describing properly")
+                raise BonesPhraseError("error needs describing properly")
         else:
             # noun unary
             rhs = tokens[0].tok2
@@ -214,7 +214,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 
     elif style is binary:
         # noun binary arg2          (binary and arg2 may have tuples afterward)
-        if len(tokens) < 2: raise SentenceError("incomplete phrase - {noun, binary} is missing args after the binary")
+        if len(tokens) < 2: raise BonesPhraseError("incomplete phrase - {noun, binary} is missing args after the binary")
         postBinaryTok = tokens[1]
         if isinstance(postBinaryTok, TupParenOrDestructureGrp):
             tup = parseTupParenOrDestructureGroup(postBinaryTok, symtab, k.sm)
@@ -241,7 +241,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
 
     elif style is ternary:
         # noun ternary arg2 arg3    (ternary, arg2 and arg3 may have parens afterward)
-        if len(tokens) < 3: raise SentenceError(f"incomplete phrase - {{noun, ternary{', arg2' if len(tokens) == 2 else ''}}} is missing args after the ternary")
+        if len(tokens) < 3: raise BonesPhraseError(f"incomplete phrase - {{noun, ternary{', arg2' if len(tokens) == 2 else ''}}} is missing args after the ternary")
 
         i = 1
 
@@ -297,7 +297,7 @@ def parseSingle(t, symtab, k):
             nameAndAccessors = t.src.split('.')
             name, accessors = nameAndAccessors[0], nameAndAccessors[1:]
             meta = symtab.fOrVMetaForGet(name, LOCAL_SCOPE)
-            if meta is Missing: raise SentenceError(f'unknown name - {name}')
+            if meta is Missing: raise BonesPhraseError(f'unknown name - {name}')
             if isinstance(meta, VMeta):
                 return tcgetval(t.tok1, meta.symtab, LOCAL_SCOPE, name, accessors).setTOut(meta.t)
             else:
@@ -350,7 +350,7 @@ def parsePhrase(tokens, symtab, k):
             if tag == SYMBOLIC_NAME:
                 name = t.src
                 meta = symtab.fMetaForGet(name, LOCAL_SCOPE)
-                if meta is Missing: raise DictionaryError(f"unknown function - {name}", ErrSite("unknown function"))
+                if meta is Missing: raise BonesUnknownNameError(f"unknown function - {name}", ErrSite("unknown function"))
                 tcnode, numConsumed = buildFnApplication(tcnode, meta.symtab, name, symtab, tokens, k)
                 tokens >> numConsumed
 
@@ -361,15 +361,15 @@ def parsePhrase(tokens, symtab, k):
                 name, accessors = (names[0], names[1:]) if len(names) > 1 else (name, [])
                 meta = symtab.fOrVMetaForGet(name, LOCAL_SCOPE)
                 if meta is Missing:
-                    raise SentenceError(f"unknown name - {name}", ErrSite("unknown name"))
+                    raise BonesPhraseError(f"unknown name - {name}", ErrSite("unknown name"))
                 if isinstance(meta, FnMeta):
                     if accessors:
-                        raise SentenceError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
+                        raise BonesPhraseError(f"{t.src} makes no sense as {name} is a function", ErrSite("NAME #1"))
                     tcnode, numConsumed = buildFnApplication(tcnode, meta.symtab, name, symtab, tokens, k)
                     tokens >> numConsumed
                 elif len(tokens) > 1 and isinstance(tokens[1], TupParenOrDestructureGrp) and name in symtab.implicitParams:
                     if accessors:
-                        raise SentenceError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
+                        raise BonesPhraseError(f"{t.src} makes no sense, e.g. inferredArg.a.b(...) - need to explain why in normal speak", ErrSite("NAME #2"))
                     # ambiguous - is `inferredArg (...)` an object object apply or a fun apply
                     # design decision - decide that it is the latter
                     meta = symtab.changeVMetaToFnMeta(name)
@@ -381,7 +381,7 @@ def parsePhrase(tokens, symtab, k):
                         # `arg1 inferredArg(,,...) arg2` binary with partial
                         # `arg1 inferredArg(,,,...) arg2 arg3` ternary with partial
                     # however to keep the usage of inferred arguments we'll limit inferred functions to fn(...) form
-                    if tcnode is not Missing: raise SentenceError(f"object {name}(...) not allowed", ErrSite("object name(...) not allowed"))
+                    if tcnode is not Missing: raise BonesPhraseError(f"object {name}(...) not allowed", ErrSite("object name(...) not allowed"))
                     # TODO add a test to check that `{1 + f(x)}` is handled correctly (i.e. the binary + doesn't appear in tcnode here)
                     tcnode, numConsumed = buildFnApplication(tcnode, meta.symtab, name, symtab, tokens, k)
                     numArgs = tcnode.fnnode.numargs
@@ -395,19 +395,19 @@ def parsePhrase(tokens, symtab, k):
             elif tag == PARENT_VALUE_NAME:
                 name = t.src
                 meta = symtab.vMetaForGet(name, PARENT_SCOPE)
-                if meta is Missing: raise SentenceError(f"unknown parent value name - {name}")
+                if meta is Missing: raise BonesPhraseError(f"unknown parent value name - {name}")
                 raise NotYetImplemented()
 
             elif tag == CONTEXT_NAME:
                 name = t.src
                 meta = symtab.fOrVMetaForGet(name, CONTEXT_NAME)
-                if meta is Missing: raise SentenceError(f"unknown context name - {name}")
+                if meta is Missing: raise BonesPhraseError(f"unknown context name - {name}")
                 raise NotYetImplemented()
 
             elif tag == GLOBAL_NAME:
                 name = t.src
                 meta = symtab.vMetaForGet(name, GLOBAL_SCOPE)
-                if meta is Missing: raise SentenceError(f"unknown parent value name - {name}")
+                if meta is Missing: raise BonesPhraseError(f"unknown parent value name - {name}")
                 raise NotYetImplemented()
 
             elif tag == BIND_RIGHT:
@@ -416,7 +416,7 @@ def parsePhrase(tokens, symtab, k):
                 if isinstance(tcnode, (tcfunc, tcblock)):
                     # meta = symtab.fMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
-                    #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
+                    #     raise BonesPhraseError(f'{name} already defined', ErrSite("name already defined"))
                     # more may need to happen here - e.g. check for style tag
                     symtab.defFnMeta(name, tcnode.tRet, LOCAL_SCOPE)   # create a slot in the symtab for the fn
                     symtab.bindFn(name, tcnode)       # add it to the overloads (it will be queued if it needs inferring)
@@ -429,7 +429,7 @@ def parsePhrase(tokens, symtab, k):
                 else:
                     # meta = symtab.vMetaForBind(name, LOCAL_SCOPE)
                     # if meta is not Missing:
-                    #     raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
+                    #     raise BonesPhraseError(f'{name} already defined', ErrSite("name already defined"))
                     symtab.defVMeta(name, TBI, LOCAL_SCOPE)
                     #HACK
                     tcnode = tcnode[0] if isinstance(tcnode, list) else tcnode
@@ -446,7 +446,7 @@ def parsePhrase(tokens, symtab, k):
                 name = t.src
                 meta = symtab.vMetaForBind(name, GLOBAL_SCOPE)
                 if meta is not Missing:
-                    raise SentenceError(f'{name} already defined', ErrSite("name already defined"))
+                    raise BonesPhraseError(f'{name} already defined', ErrSite("name already defined"))
                 else:
                     symtab.defVMeta(name, TBI, GLOBAL_SCOPE)
                     accessors = []

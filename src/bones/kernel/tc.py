@@ -25,7 +25,7 @@ from bones.core.sentinels import Missing
 from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
 from bones.ts.metatypes import BType, BTFn, BTTuple
 from bones.lang.types import void, TBI, nullary
-from bones.kernel.core import LOCAL_SCOPE, RET_VAR_NAME
+from bones.kernel._core import LOCAL_SCOPE, RET_VAR_NAME
 
 _nodeseed = itertools.count(start=1)
 

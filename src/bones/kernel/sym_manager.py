@@ -9,6 +9,7 @@
 
 from bones.core.sentinels import Missing
 
+
 class Sym:
     __slots__ = ['_id', '_st']
     def __init__(self, id, symtab):

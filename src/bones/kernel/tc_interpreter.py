@@ -10,7 +10,7 @@
 from bones.kernel.tc import tcload, tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
     tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock
 from bones.lang.types import _tvfunc
-from bones.kernel.core import MODULE_SCOPE
+from bones.kernel._core import MODULE_SCOPE
 from bones.kernel.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError

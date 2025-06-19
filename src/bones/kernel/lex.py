@@ -12,7 +12,8 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 import re, collections, itertools
-from bones.core.errors import ProgrammerError, SpellingError, ErrSite, handlersByErrSiteId, NotYetImplemented
+from bones.core.errors import ProgrammerError, ErrSite, handlersByErrSiteId, NotYetImplemented
+from bones.kernel.errors import BonesLexError
 from bones.core.sentinels import Missing
 
 
@@ -630,7 +631,7 @@ def lexBonesSrc(srcId, src):
                 break
         if (ILLEGAL1 <= tag and tag <= ILLEGAL2):
             token = tokens[-1]
-            raise SpellingError(f'Illegal token: {token.src} @line {token.l1}:  {lines[token.l1].src}', ErrSite('illegal tag'))
+            raise BonesLexError(f'Illegal token: {token.src} @line {token.l1}:  {lines[token.l1].src}', ErrSite('illegal tag'))
         if tag == CONDITIONAL_COMMENT:
             raise NotYetImplemented('this will need handling at the lex stage')
         if not match:
@@ -640,7 +641,7 @@ def lexBonesSrc(srcId, src):
             print(f"{str(l2 - 1).rjust(width)} {lines[l2 - 1].src}")
             print(f"{str(l2 - 0).rjust(width)} {lines[l2 - 0].src}")
             print(" "*width+"  "+ " " *(c2-1) + "^")
-            raise SpellingError(f'Illegal character: {src[pos:pos+1]} @line {l2}:  {lines[l2].src}', ErrSite('no match'))
+            raise BonesLexError(f'Illegal character: {src[pos:pos+1]} @line {l2}:  {lines[l2].src}', ErrSite('no match'))
         pos = match.end()
         priorTag = tag
 
@@ -648,6 +649,6 @@ def lexBonesSrc(srcId, src):
 
 
 handlersByErrSiteId.update({
-    ('bones.parse.lex', Missing, 'lexBonesSrc', 'illegal tag') : '...',
-    ('bones.parse.lex', Missing, 'lexBonesSrc', 'no match') : '...',
+    ('bones.kernel.lex', Missing, 'lexBonesSrc', 'illegal tag') : '...',
+    ('bones.kernel.lex', Missing, 'lexBonesSrc', 'no match') : '...',
 })

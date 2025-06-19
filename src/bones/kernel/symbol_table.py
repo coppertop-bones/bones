@@ -13,11 +13,11 @@ from bones import jones
 from bones.core.context import context
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
-from bones.core.errors import ScopeError
+from bones.kernel.errors import BonesScopeAccessError
 from bones.lang.types import _tvfunc, TBI
 from bones.kernel.tc import tcfunc, tcblock
 from bones.ts.select import Overload, Family
-from bones.kernel.core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
+from bones.kernel._core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
 
 # SymbolTable
@@ -298,9 +298,9 @@ class SymbolTable:
             raise ProgrammerError()
 
     def defFnMeta(self, name, t, scope):
-        if self._globalSymTab is Missing: raise ScopeError('Can\'t define function in global scope')
+        if self._globalSymTab is Missing: raise BonesScopeAccessError('Can\'t define function in global scope')
         if scope == LOCAL_SCOPE:
-            if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError('A name can only refer to a value or an fn')
+            if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
             if name not in self._fnMetaByName or name not in self._newFnMetaByName:
                 self._newFnMetaByName[name] = FnMeta(t, self)
         elif scope == CONTEXT_SCOPE:
@@ -321,8 +321,8 @@ class SymbolTable:
         if not self.hasF(name): raise ProgrammerError()
         if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc, tcblock)) and fn != TBI:
             raise ProgrammerError()
-        if self._globalSymTab is Missing: raise ScopeError('Missing global scope')
-        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError('A name can only refer to a value or an fn')
+        if self._globalSymTab is Missing: raise BonesScopeAccessError('Missing global scope')
+        if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
         overload = self.getOverload(name, fn.numargs)
         overload[fn.tArgs] = fn
         return overload
