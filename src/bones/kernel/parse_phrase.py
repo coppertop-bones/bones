@@ -303,11 +303,11 @@ def parseSingle(t, symtab, k):
             else:
                 return tcgetfamily(t.tok1, meta.symtab, name, LOCAL_SCOPE)
         elif tag == INTEGER:
-            return tclit(t.tok1, symtab, k.sm.parseLitInt(t.src))
+            return tclit(t.tok1, symtab, k.parsers.parseLitInt(t.src))
         elif tag == DECIMAL:
-            return tclit(t.tok1, symtab, k.sm.parseLitNum(t.src))
+            return tclit(t.tok1, symtab, k.parsers.parseLitNum(t.src))
         elif tag == TEXT:
-            return tclit(t.tok1, symtab, k.sm.parseLitUtf8(t.src))
+            return tclit(t.tok1, symtab, k.parsers.parseLitUtf8(t.src))
         else:
             missingTag = prettyNameByTag[tag]
             raise NotYetImplemented()
@@ -454,27 +454,27 @@ def parsePhrase(tokens, symtab, k):
                     tokens >> 1
 
             elif tag == INTEGER:
-                tcnode = tclit(t.tok1, symtab, k.sm.parseLitInt(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitInt(t.src))
                 tokens >> 1
 
             elif tag == DECIMAL:
-                tcnode = tclit(t.tok1, symtab, k.sm.parseLitNum(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitNum(t.src))
                 tokens >> 1
 
             elif tag == TEXT:
-                tcnode = tclit(t.tok1, symtab, k.sm.parseLitUtf8(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitUtf8(t.src))
                 tokens >> 1
 
             elif tag == SYM:
-                tcnode = tclit(t.tok1, symtab, k.litsymCons(k.sm.parseSym(t.src)))
+                tcnode = tclit(t.tok1, symtab, k.litsymCons(k.parsers.parseSym(t.src)))
                 tokens >> 1
 
             elif tag == SYMS:
-                tcnode = tclit(t.tok1, symtab, k.sm.parseLitSyms(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitSyms(t.src))
                 tokens >> 1
 
             elif tag == DATE:
-                tcnode = tclit(t.tok1, symtab, k.sm.parseLitDate(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitDate(t.src))
                 tokens >> 1
 
             elif tag in (
@@ -502,7 +502,7 @@ def parsePhrase(tokens, symtab, k):
                     vs, names, ts = [], [], []
                     for phrase in t.phrases:
                         v, nameToken = phrase[:-1], phrase[-1]
-                        names.append(k.sm.parseSym(nameToken.src))
+                        names.append(k.parsers.parseSym(nameToken.src))
                         tcnode = parsePhrase(v, symtab, k)
                         vs.append(tcnode)
                         ts.append(tcnode.tOut)

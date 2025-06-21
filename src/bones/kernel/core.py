@@ -40,9 +40,9 @@ class BonesKernel:
 
     __slots__ = [
         'sm',
-        'stackManager', 'globalsManager', 'codeManager', 'contextualScopeManager',
+        'stackManager', 'globalsManager', 'codeManager', 'contextualScopeManager', 'parsers', 'symbolManager',
         'ctxs', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner',
-        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons'
+        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons',
     ]
 
     def __init__(self, *, litdateCons, litsymCons, littupCons, litstructCons, litframeCons):
@@ -52,6 +52,8 @@ class BonesKernel:
         self.globalsManager = GlobalsManager()
         self.codeManager = CodeManager()
         self.contextualScopeManager = ContextualScopeManager()
+        self.parsers = Parsers(self)
+        self.symbolManager = SymManager()
 
         self.ctxs = {}
         self.modByPath = {}
@@ -278,46 +280,9 @@ class PythonStorageManager:
     __slots__ = ('syms', '_holderByModPathByName', '_frameBySymTab', 'stack')
 
     def __init__(self):
-        self.syms = SymManager()
         self._holderByModPathByName = {}
         self._frameBySymTab = {}
         self.stack = []
-
-    def parseLitInt(self, s):
-        return litint(s)
-
-    def parseLitNum(self, s):
-        return litnum(s)
-
-    def parseLitDate(self, s):
-        raise NotYetImplemented()
-
-    def parseLitDateTime(self, s):
-        raise NotYetImplemented()
-
-    def parseLitCityDateTime(self, s):
-        raise NotYetImplemented()
-
-    def parseLitTime(self, s):
-        raise NotYetImplemented()
-
-    def parseLitUtf8(self, s):
-        return littxt(s[1:-1])  # OPEN: strip the quotes in lex instead
-
-    def parseSym(self, s):
-        return self.syms.Sym(s)
-
-    def parseLitSyms(self, ss):
-        return litsyms([self.syms.Sym(s) for s in ss])
-
-    def newTuple(self):
-        raise NotYetImplemented()
-
-    def newStuct(self):
-        raise NotYetImplemented()
-
-    def newTable(self):
-        raise NotYetImplemented()
 
     def frameForSymTab(self, symtab):
         if (frame := self._frameBySymTab.get(symtab, Missing)) is Missing:
@@ -387,6 +352,36 @@ class PythonStorageManager:
 
 
 
+class Parsers:
+    def __init__(self, k):
+        self.k = k
+
+    def parseLitInt(self, s):
+        return litint(s)
+
+    def parseLitNum(self, s):
+        return litnum(s)
+
+    def parseLitDate(self, s):
+        raise NotYetImplemented()
+
+    def parseLitDateTime(self, s):
+        raise NotYetImplemented()
+
+    def parseLitCityDateTime(self, s):
+        raise NotYetImplemented()
+
+    def parseLitTime(self, s):
+        raise NotYetImplemented()
+
+    def parseLitUtf8(self, s):
+        return littxt(s[1:-1])  # OPEN: strip the quotes in lex instead
+
+    def parseSym(self, s):
+        return self.k.symbolManager.Sym(s)
+
+    def parseLitSyms(self, ss):
+        return litsyms([self.k.symbolManager.Sym(s) for s in ss])
 
 
 handlersByErrSiteId.update({
