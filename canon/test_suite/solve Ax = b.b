@@ -25,10 +25,10 @@ QRSolve: {{[A:matrix, b:vec] -> vec                    // R is <:UpperRight>, Q 
 }}
 x: A QRSolve b
 
-QR: {{[A:matrix] <:{Q:matrix,R:matrix}> ...}
+QR: {{[A:matrix] <:{Q:matrix,R:matrix}> ...}}
 
 
-load scipy.linalg
+//load scipy.linalg
 // from scipy.linalg import QR, SVD, backSub, I
 A: (2, 0, 1; 0, 1, -1; 1, 1, 1) <:matrix>
 b: (2, 0, 2) + (1, 0, 1) <:vec>                 // just showing vector addition to get (3,0,3)
@@ -56,7 +56,7 @@ x: A QRSolve b
 {x + y} <:count>
 {[x,y] <:count> x + y}
 
-QRSolve: {{[A:matrix, b:vec, _.numSolves:count] <:vec> _.numSolves: _.numSolves + 1. x dot y}}
+QRSolve: {{[A:matrix, b:vec] <:vec> _.numSolves: _.numSolves + 1. x dot y}}
 
 
 

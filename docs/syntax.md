@@ -74,7 +74,7 @@ a: 1
 ```
 {x + 1}                         // implicit arg x
 {[x] x + 1}                     // explicit arg x
-{[x:count] x + 1}               // arg with type annotated
+{[x:count] x + 1}               // parameter with type annotated
 {[x:count] <:count> x + 1}      // return type annotated
 {{x + y}}                       // binary
 ```

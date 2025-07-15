@@ -8,16 +8,16 @@ NOT_VERY_EFFECTIVE: 0.5
 NORMAL_EFFECTIVE:   1.0
 SUPER_EFFECTIVE:    2.0
 
-<:Pokestyle:>                           // ensures the atom Pokestyle exists
+<:Pokestyle: atom>                      // ensures the atom Pokestyle exists
 
-<:Fire:     Pokestyle & _Fire>          // ensures _Fire as well as Fire exists
-<:Water:    Pokestyle & _Water>
-<:Electric: Pokestyle & _Electric>
-<:Grass:    Pokestyle & _Grass>
-<:Ice:      Pokestyle & _Ice>
-<:Fighting: Pokestyle & _Fighting>
-<:Poison:   Pokestyle & _Poison>
-<:Ground:   Pokestyle & _Ground>
+<:Fire:     Pokestyle & Fire>          // ensures _Fire as well as Fire exists
+<:Water:    Pokestyle & Water>
+<:Electric: Pokestyle & Electric>
+<:Grass:    Pokestyle & Grass>
+<:Ice:      Pokestyle & Ice>
+<:Fighting: Pokestyle & Fighting>
+<:Poison:   Pokestyle & Poison>
+<:Ground:   Pokestyle & Ground>
 
 eff: {[atk:Pokestyle & T1, def:Pokestyle & T2]  ..NORMAL_EFFECTIVE}     // T1 and T2 are residuals of decomposition
 

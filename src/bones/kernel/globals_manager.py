@@ -7,15 +7,17 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-LOCAL_SCOPE = 1       # e.g. fred - r/w - may be polymorphic
-PARENT_SCOPE = 2      # e.g. .fred - r/o
-MODULE_SCOPE = 3      # e.g. ..MAX_ITER - r/o
-CONTEXT_SCOPE = 4     # e.g. _.fred - r/w - fully typed as it may be confusing to type on first usage
-GLOBAL_SCOPE = 5      # e.g. _..fred - r/w - fully typed as it may be confusing to type on first usage
+from bones.core.sentinels import Missing
 
-GLOBAL = 'global'
-SCRATCH = 'scratch'
 
-RET_VAR_NAME = "__RET__"
-MAX_NUM_ARGS = 10
-
+class GlobalsManager:
+    __slots__ = ('globals', '_next')
+    def __init__(self):
+        self.globals = [Missing] * 1000
+        self._next = 0
+    def reserve(self):
+        if self.next >= len(self.globals):
+            self.globals.extend([Missing] * 1000)
+        offset = self._next
+        self._next += 1
+        return offset

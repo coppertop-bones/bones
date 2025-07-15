@@ -7,7 +7,7 @@ pupils: () <:ll & person>
 
 node: T + (N**node)
 
-or
+// or
 
 <:tree: {item: T} + {children: N**tree}>   // loops are allowed in types
 

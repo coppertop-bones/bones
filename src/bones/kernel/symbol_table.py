@@ -10,30 +10,62 @@
 import collections, itertools
 from collections import namedtuple
 from bones import jones
+from bones.core.context import context
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
-from coppertop.pipe import _Function, _Dispatcher
-from bones.core.errors import ScopeError
-from bones.lang.core import MAX_NUM_ARGS
-from bones.lang.types import TBI
-from bones.lang.tc import bfunc
-from bones.ts.metatypes import BTUnion, BTFn, BTOverload
-from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
+from bones.kernel.errors import BonesScopeAccessError
+from bones.lang.types import _tvfunc, TBI
+from bones.kernel.tc import tcfunc, tcblock
+from bones.ts.select import Overload, Family
+from bones.kernel._core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
-# SymTab
+
+# SymbolTable
+# The purpose of the symbol table is to map a name (symbol) into the overall structure of the program. For example, in
+# C a name in a block could be defined in the block scope, the parent block scope, ..., enclosing function scope or
+# global scope. In a Python a name in a function can be found in the function's env, in a parent function, ..., module.
+# This resolution must happen after parsing (consider defining fred after fred has been gotten from a parent scope) and
+# before the analysis step. It must also be done after the module (consider defining a name after a function). After
+# parsing the symbol tables for the module and each function and block must be consolidated. After this consolidation
+# the symbol tables know where each names lives - in the global, contextual, frame or code scopes - and can be called
+# on to generate offsets (in the Python implementation) for those different scopes.
+
+# in the REPL we can define a function called fred that refers to a module variable jow that hasn't been defined yet?
+# in a modules source this is clearly possible.
+
+# thus bones is multi pass and can refer to names defined later - which can make for nicer code organisation.
+
+# The scope modifiers ".", "..", "_." and "_.." add a little more structure to the program's source code, in fact
+# enough stucture that the only names that might need consolidating are block variables, which are always defined in
+# the enclosing function's scope. Thus, we could have a consolidation step in bones (and should know where it comes in
+# the PACE process) but we don't need one for now. If we added block locals or one level access then we would
+# potentially need a consolidation step. If we allowed the parent scope modified to scan up the parent's parent all the
+# way up to the module we would need a consolidation process and consolidation rules to handle ambiguities.
+
+# Note block arguments may be the same name as names in the enclosing function scope. Thus this is allowable:
+
+# {
+#     x = 1
+#     [1,2,3] collect [[x] x + 1]
+# }
+
+
+
+
+# SymbolTable
 #   holds all information for symbols
 #   holds the actual callable functions defined in it
 #   (values are stored by the storage manager)
-#   contexts can see other contexts - e.g. the global, module, context scope context and lexicalParent
+#   symbol tables can see other symbol tables - e.g. the global, module, contextual scope and lexicalParent
 #
-# scoping rules determine how the context that defines a name is discovered - thus are behaviours not objects
-#   types are only used inside <:..> etc and are stored in the global context (we may add module types if needed later)
+# scoping rules determine how the symbol table that defines a name is discovered - thus are behaviours not objects
+#   types are only used inside <:..> etc and are stored in the global symbol table (the plan is to add type namespaces)
 #   value scopes don't inherit - can access immediate parent with .fred and module with ..CONST
-#   function scopes inherit from their lexical parent all the way up to modules
-#   functions are not allowed in global context
+#   function scopes inherit from their lexical parent all the way up to module
+#   functions are not allowed in global symbol table
 #
 # pipeline styles are kept globally in the kernel - so we know the set of function names, however we can have a local 
-# name that refers to a value - so before accessing a name we ask for which context is in and it's type
+# name that refers to a value - so before accessing a name we ask for which symbol table is in and it's type
 #
 # consider
 # {f(x)} - parser figures f is a function and can update the symtab accordingly, x is very ambiguous
@@ -48,6 +80,10 @@ from bones.lang.core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCO
 # so before querying a name we need it's meta - what is it and which symtab does it belong to
 
 
+# OPEN:
+#  - function selection cache invalidation and refresh and reanalysis and recompilation of affected code
+
+
 
 def ppScope(scope):
     if scope == LOCAL_SCOPE: return 'local'
@@ -56,119 +92,35 @@ def ppScope(scope):
     if scope == CONTEXT_SCOPE: return 'contextual'
     if scope == GLOBAL_SCOPE: return 'global'
 
-VMeta = namedtuple('VMeta', ['t', 'st'])
-FnMeta = namedtuple('FnMeta', ['t', 'st'])         # actual type schemas are kept in the overloads
-TMeta = namedtuple('TMeta', ['t', 'st'])
 
 _anonSeed = itertools.count(start=1)
 
 
 PYCHARM = False
 
-def tOverload(): pass
 
-
-# Overload and Family are for managing collections of functions - we can optimise later, and these should be
-# integrated with the dispatchers in the piping
-
-class Family:
-    __slots__ = ['name', 'overloads', '_t_']
-
-    def __init__(self, name, overloads):
-        self.name = name
-        self.overloads = overloads
-        self._t_ = Missing
-
-    @property
-    def _t(self):
-        if self._t_ is Missing or PYCHARM:
-            tFns = []
-            for ov in self.overloads:
-                if ov is not Missing:
-                    for sig, fn in ov._fnBySig.items():
-                        tFns.append(fn._t)
-            self._t_ = BTOverload(*tFns)
-        return self._t_
-
-
-class Overload:
-    # holds a collection of functions for a given name and number of args
-
-    __slots__ = ['name', 'numargs', '_fnsTBI', '_t_', '_tUpperBounds_', '_fnBySig']
-
-    def __init__(self, name, numargs):
-        self.name = name
-        self.numargs = numargs
-        self._fnsTBI = _TBIQueue()
-        self._t_ = Missing
-        self._tUpperBounds_ = Missing           # set else where
-        self._fnBySig = {}
-
-    @property
-    def _t(self):
-        if self._t_ is Missing:
-            self._t_ = BTOverload(*[fn._t for fn in self._fnBySig.values()])
-        return self._t_
-
-    def __setitem__(self, sig, fn):
-        if fn.numargs != self.numargs: raise ProgrammerError()
-        self._t_ = Missing
-        self._tUpperBounds_ = Missing
-        needsInferring = False
-        for tArg in fn.tArgs:
-            if tArg == TBI:
-                needsInferring = True
-                break
-        if fn.tRet == TBI:
-            needsInferring = True
-        if needsInferring:
-            # if any arg needs to be inferred then it cannot be added to the overload yet and that can only be done
-            # post inference so let's trying queuing it?
-            self._fnsTBI << fn
-        else:
-            if fn in self._fnsTBI:
-                self._fnsTBI.remove(fn)
-            self._fnBySig[sig] = fn
-
-    def __getitem__(self, sig):
-        return self._fnBySig[sig]
-
+class _Meta:
+    __slots__ = ['t', 'symtab']
+    def __init__(self, t, symtab):
+        self.t = t
+        self.symtab = symtab
     def __repr__(self):
-        answer = f'{self.name}_{self.numargs}'
-        ppT = ''
-        try:
-            ppT = repr(self._t)
-        except:
-            1/0
-            try:
-                tArgs = []
-                tRets = []
-                # collate the types for each arg
-                for i in range(self.numargs):
-                    tArgsN = []
-                    for fn in self._fnsTBI:
-                        tArgsN.append(fn.tArgs.types[i])
-                    tArgs.append(BTUnion(*tArgsN) if len(tArgsN) != 1 else tArgsN[0])
-                # collate the tRets
-                for fn in self._fnsTBI:
-                    tRets.append(fn.tRet)
-                tRet = BTUnion(*tRets) if len(tRets) > 1 else tRets[0]
-                ppT = repr(BTFn(tArgs, tRet))
-            except:
-                ppT = 'Error calc _tUpper'
+        return f'{self.__class__.__name__}<t={self.t},symtab={self.symtab}>'
 
-        return f'{answer} ({ppT})'
+class VMeta(_Meta): pass
+class FnMeta(_Meta): pass
+class TMeta(_Meta): pass
 
 
 
-class SymTab:
+class SymbolTable:
 
     __slots__ = [
         'name', 'kernel',
         '_lexicalParentSymTab', '_contextSymTab', '_moduleSymTab', '_globalSymTab',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
-        '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newOverloadsByNumArgs',
-        'argCatcher', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
+        '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newFamilyByName',
+        'implicitParams', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
         '_globalGets', '_localSets', '_contextSets', '_globalSets'
     ]
 
@@ -194,9 +146,9 @@ class SymTab:
         self._newVMetaByName = {}
         self._newFnMetaByName = {}
         self._newTMetaByName = Missing if globalSt else {}  # and here
-        self._newOverloadsByNumArgs = [{} for i in range(MAX_NUM_ARGS + 1)]
+        self._newFamilyByName = {}
 
-        self.argCatcher = Missing
+        self.implicitParams = []
         self.inferring = InferringHelper([], [])
 
         self._localGets = set()
@@ -219,7 +171,7 @@ class SymTab:
         return name in self._newVMetaByName or name in self._vMetaByName
 
     def hasT(self, name):
-        return name in self._newTMetaByName or name in self._tMetaByName
+        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
 
     def noteGets(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -233,7 +185,7 @@ class SymTab:
         elif scope == GLOBAL_SCOPE:
             self._globalGets.add(name)
         else:
-            raise ProgrammerError("Unknown scope '%s'" % scope)
+            raise ProgrammerError('Unknown scope "%s"' % scope)
 
     def noteSets(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -243,16 +195,16 @@ class SymTab:
         elif scope == GLOBAL_SCOPE:
             self._globalSets.add(name)
         else:
-            raise ProgrammerError("Unknown scope '%s'" % scope)
+            raise ProgrammerError('Unknown scope "%s"' % scope)
 
     def vMetaForGet(self, name, scope):
         if scope == LOCAL_SCOPE:
             m = self._newVMetaByName.get(name, Missing)
             if m is Missing:
                 m = self._vMetaByName.get(name, Missing)
-            if m is Missing and self.argCatcher and len(name) == 1:
+            if m is Missing and context.catchImplicitParams and len(name) == 1:
                 m = self.defVMeta(name, TBI, scope)
-                self.argCatcher.inferredArgnames.append(name)
+                self.implicitParams.append(name)
             return m
         elif scope == PARENT_SCOPE:
             raise NotYetImplemented()
@@ -323,7 +275,6 @@ class SymTab:
             m = self._globalSymTab._tMetaByName.get(name, Missing)
         return m
 
-
     def defVMeta(self, name, t, scope):
         if scope == LOCAL_SCOPE:
             currentMeta = self._newVMetaByName.get(name, Missing)
@@ -331,7 +282,8 @@ class SymTab:
             if currentMeta is not Missing and currentMeta.t != t:
                 raise NotYetImplemented("Can't merge or redefine the types of values yet")
             if name in self._newFnMetaByName or name in self._fnMetaByName:
-                raise NotYetImplemented("A name can only refer to a value or an fn")
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
             meta = VMeta(t, self)
             self._newVMetaByName[name] = meta
             return meta
@@ -346,9 +298,9 @@ class SymTab:
             raise ProgrammerError()
 
     def defFnMeta(self, name, t, scope):
-        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
+        if self._globalSymTab is Missing: raise BonesScopeAccessError('Can\'t define function in global scope')
         if scope == LOCAL_SCOPE:
-            if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
+            if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
             if name not in self._fnMetaByName or name not in self._newFnMetaByName:
                 self._newFnMetaByName[name] = FnMeta(t, self)
         elif scope == CONTEXT_SCOPE:
@@ -366,28 +318,23 @@ class SymTab:
         pass
 
     def bindFn(self, name, fn):
-        if name not in self._fnMetaByName and name not in self._newFnMetaByName: raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _Function, _Dispatcher, bfunc)) and fn != TBI: raise ProgrammerError()
-        if self._globalSymTab is Missing: raise ScopeError("Can't define function in global scope")
-        if name in self._vMetaByName or name in self._newVMetaByName: raise ScopeError("A name can only refer to a value or an fn")
         if not self.hasF(name): raise ProgrammerError()
-        numargs = fn.numargs
-        overloadsByName = self._newOverloadsByNumArgs[numargs]
-        if (overload := overloadsByName.get(name, Missing)) is Missing: overload = overloadsByName[name] = Overload(name, numargs)
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc, tcblock)) and fn != TBI:
+            raise ProgrammerError()
+        if self._globalSymTab is Missing: raise BonesScopeAccessError('Missing global scope')
+        if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
+        overload = self.getOverload(name, fn.numargs)
         overload[fn.tArgs] = fn
         return overload
 
     def getOverload(self, name, numargs):
         # MUSTDO merge the new ones with the old ones
-        return self._newOverloadsByNumArgs[numargs][name]
+        return self.getFamily(name).getOverload(numargs)
 
-    def getOverloadFamily(self, name):
-        ovs = [Missing for i in range(MAX_NUM_ARGS + 1)]
-        for i, m in enumerate(self._newOverloadsByNumArgs):
-            # MUSTDO merge the new ones with the old ones
-            if (ov := m.get(name, Missing)) is not Missing:
-                ovs[i] = ov
-        return Family(name, ovs)
+    def getFamily(self, name):
+        if (family := self._newFamilyByName.get(name, Missing)) is Missing:
+            self._newFamilyByName[name] = family = Family.newForMutation(name=name)
+        return family
 
     @property
     def path(self):
@@ -398,8 +345,17 @@ class SymTab:
             answer += self._moduleSymTab.path
         return self.name if answer == '' else answer + '.' + self.name
 
+    @property
+    def parentPath(self):
+        answer = ''
+        if self._lexicalParentSymTab is not Missing:
+            answer += self._lexicalParentSymTab.path
+        elif self._moduleSymTab is not Missing:
+            answer += self._moduleSymTab.path
+        return answer
+
     def __repr__(self):
-        return f'SymTab<{self.path}>'
+        return f'SymbolTable<{self.path}>'
 
     def updateMetaType(self, name, currentMeta, t):
         if isinstance(currentMeta, VMeta):
@@ -417,36 +373,38 @@ class SymTab:
         self.defFnMeta(name, TBI, LOCAL_SCOPE)
         return self._newFnMetaByName[name]
 
+    def changeFnMetaToVMeta(self, name):
+        oldT = self._newFnMetaByName[name].t
+        assert oldT == TBI
+        del self._newFnMetaByName[name]
+        self.defVMeta(name, TBI, LOCAL_SCOPE)
+        return self._newVMetaByName[name]
+
+
+class GlobalScope(SymbolTable):
+    pass
+
+class ModuleScope(SymbolTable):
+    pass
+
+class ContextualScope(SymbolTable):
+    pass
+
+class FunctionScope(SymbolTable):
+    pass
+
+class BlockScope(SymbolTable):
+    pass
 
 
 def fnSymTab(lexicalParentSt):
     if lexicalParentSt._globalSymTab is Missing:
         raise ProgrammerError()
-    return SymTab(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
+    return SymbolTable(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
 
 def blockSymTab(lexicalParentSt):
     # OPEN: implement properly - args are local all others are shared
     return lexicalParentSt
 
 
-class _TBIQueue:
-    def __init__(self):
-        self._fns = []   # need a queue as potentially the parser could add more than one before types are inferred
-    def __lshift__(self, f):   # self << f
-        self._fns.append(f)
-    def __contains__(self, f):
-        return f in self._fns
-    def remove(self, f):
-        self._fns.remove(f)
-    def __repr__(self):
-        return f'<{", ".join([repr(e) for e in self._fns])}>'
-    def __len__(self):
-        return len(self._fns)
-    # def first(self):
-    #     return self._fns[0]
-    def __iter__(self):
-        return iter(self._fns)
-
-
-ArgCatcher = collections.namedtuple('ArgCatcher', ['inferredArgnames'])
 InferringHelper = collections.namedtuple('InferringHelper', ['typeVariables', 'fnVariables'])
