@@ -6,7 +6,6 @@
 
 
 // FIX:
-// load scipy.linalg
 // from scipy.linalg import QR, SVD, backSub, Id
 A: (2.;0.;1., 0.;1.;-1., 1.;1.;1.) <:matrix>
 b: (2.,0.,2.) + (1.,0.,1.) <:vec>               // just showing vector addition to get (3,0,3)
@@ -28,7 +27,6 @@ x: A QRSolve b
 QR: {{[A:matrix] <:{Q:matrix,R:matrix}> ...}}
 
 
-//load scipy.linalg
 // from scipy.linalg import QR, SVD, backSub, I
 A: (2, 0, 1; 0, 1, -1; 1, 1, 1) <:matrix>
 b: (2, 0, 2) + (1, 0, 1) <:vec>                 // just showing vector addition to get (3,0,3)

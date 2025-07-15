@@ -14,7 +14,6 @@
 #   frames from ([...]...)
 #   tuples from (...)
 #   blocks from [...]
-#   modules to load
 #   names to import from modules
 #   typelang tags from <:...>
 #
@@ -343,8 +342,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
         consumer = Missing
         while consumer is Missing:
             if currentG._isInteruptable:
-                consumer = catchLoad(token, currentG, stack)
-                if consumer is Missing: consumer = catchFromImport(token, currentG, stack)
+                consumer = catchFromImport(token, currentG, stack)
                 if consumer is Missing: consumer = catchKeyword(token, currentG, stack)
                 if consumer:
                     if TRACE:
@@ -1806,139 +1804,139 @@ class _KeywordGrp(_PhrasesGrp):
 
 
 
-# **********************************************************************************************************************
-# load ...
-# **********************************************************************************************************************
-
-def catchLoad(token, currentG, stack):
-    if not (token.tag == NAME and token.src == 'load'): return Missing
-    lg = LoadGrp(currentG, token, currentG.symtab)
-    currentG._consumeToken(lg, token.indent)
-    return stack.push(lg)
-
-class LoadGrp(_PhrasesGrp):
-    # load sdf.sdf.sdf, sdf.sdf   -> list of modules to load into the kernel
-
-    _exactlyOneNameInPhrase = False
-    _isInteruptable = False
-
-    __slots__ = ['_awaitingTokens', '_lastLineBreakAndIndent']
-
-    def __init__(self, parent, opener, symtab):
-        super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY, symtab)
-        self._awaitingTokens = True
-        self._phraseIndent = opener.indent
-        self._lastLineBreakAndIndent = Missing
-
-    def _processCloserOrAnswerError(self, token):
-        self._finalise(token)
-        return self.parent._processCloserOrAnswerError(token)
-
-    def _finalise(self, tokenOrGroup):
-        if self._tokens:
-            self._phrases << self._tokens
-            self._tokens = _TokensGL()
-        if len(self._phrases) == 0:
-            raise BonesGroupingError(
-                f'requires - no items specified - needs better error msg',
-                ErrSite(self.__class__, 'requires - no items specified'),
-                self, Missing
-            )
-        if self._awaitingTokens:
-            raise BonesGroupingError(
-                f'Encountered GROUP_END without a NAME - better error msg needed',
-                ErrSite(self.__class__, 'Encountered GROUP_END without a NAME'),
-                self, tokenOrGroup
-            )
-        super()._finalise(tokenOrGroup)
-
-    @property
-    def PPGroup(self):
-        return '{L}'
-
-    @property
-    def PPDebug(self):
-        return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
-
-    def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
-        # answer self if we consume the token or Missing if we don't
-        if self._tokens is Missing: raise ProgrammerError()
-
-        if self._phraseState == GROUP_END:
-            self._finalise(tokenOrGroup)
-            return Missing
-
-        stateToStore = Missing
-
-        if not isinstance(tokenOrGroup, Token):
-            raise BonesGroupingError(
-                'No groups allowed in load - better error msg needed',
-                ErrSite(self.__class__, 'No groups allowed in load'),
-                self, tokenOrGroup
-            )
-
-        elif tokenOrGroup.tag is BREAKOUT:
-            raise BonesGroupingError(
-                'No breakouts allowed in load - better error msg needed',
-                ErrSite(self.__class__, 'No breakouts allowed in load'),
-                self, tokenOrGroup
-            )
-
-        elif tokenOrGroup.tag in (SEMI_COLON, KEYWORD_OR_BIND_LEFT, BIND_RIGHT):
-            raise BonesGroupingError(
-                f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load - better error msg needed',
-                ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load)'),
-                self, tokenOrGroup
-            )
-
-        elif tokenOrGroup.tag in (LINE_COMMENT, INLINE_COMMENT, CONTINUATION):
-            pass
-
-        elif tokenOrGroup.tag is LINE_BREAK:
-            if self._lastLineBreakAndIndent is not Missing:
-                self._phraseState = GROUP_END
-                self._finalise(tokenOrGroup)
-                self.parent._consumeToken(*self._lastLineBreakAndIndent)
-                return Missing
-            # need to store some state to send to the parent if it turns out I shouldn't have consumed this
-            stateToStore = tokenOrGroup, indent
-
-        elif (indent < self._phraseIndent + MIN_INDENT) or tokenOrGroup.tag is DOT:
-            # any token to the left of the load statement + MIN_INDENT means we are ending the load section
-            self._phraseState = GROUP_END
-            self._finalise(tokenOrGroup)
-            if self._lastLineBreakAndIndent is not Missing:
-                self.parent._consumeToken(*self._lastLineBreakAndIndent)
-            return Missing
-
-        elif tokenOrGroup.tag is COMMA:
-            if self._awaitingTokens:
-                raise BonesGroupingError(
-                    f'Encountered COMMA without a NAME - better error msg needed',
-                    ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
-                    self, tokenOrGroup
-                )
-            else:
-                self._phrases << self._tokens
-                self._tokens = _TokensGL()
-                self._awaitingTokens = True
-
-        elif tokenOrGroup.tag in (NAME, TEXT):
-            if self._awaitingTokens:
-                self._appendToken(tokenOrGroup, indent)
-                self._awaitingTokens = False
-            else:
-                raise BonesGroupingError(
-                    f'Encountered a NAME or TEXT without a COMMA - better error msg needed',
-                    ErrSite(self.__class__, 'Encountered NAME without a COMMA'),
-                    self, tokenOrGroup
-                )
-
-        else:
-            raise ProgrammerError(f'{prettyNameByTag[tokenOrGroup.tag]} hasn\'t been handled')
-
-        self._lastLineBreakAndIndent = stateToStore
-        return self
+# # **********************************************************************************************************************
+# # load ...
+# # **********************************************************************************************************************
+#
+# def catchLoad(token, currentG, stack):
+#     if not (token.tag == NAME and token.src == 'load'): return Missing
+#     lg = LoadGrp(currentG, token, currentG.symtab)
+#     currentG._consumeToken(lg, token.indent)
+#     return stack.push(lg)
+#
+# class LoadGrp(_PhrasesGrp):
+#     # load sdf.sdf.sdf, sdf.sdf   -> list of modules to load into the kernel
+#
+#     _exactlyOneNameInPhrase = False
+#     _isInteruptable = False
+#
+#     __slots__ = ['_awaitingTokens', '_lastLineBreakAndIndent']
+#
+#     def __init__(self, parent, opener, symtab):
+#         super().__init__(parent, opener, COMMA_SEP, ERR_ON_EMPTY, symtab)
+#         self._awaitingTokens = True
+#         self._phraseIndent = opener.indent
+#         self._lastLineBreakAndIndent = Missing
+#
+#     def _processCloserOrAnswerError(self, token):
+#         self._finalise(token)
+#         return self.parent._processCloserOrAnswerError(token)
+#
+#     def _finalise(self, tokenOrGroup):
+#         if self._tokens:
+#             self._phrases << self._tokens
+#             self._tokens = _TokensGL()
+#         if len(self._phrases) == 0:
+#             raise BonesGroupingError(
+#                 f'requires - no items specified - needs better error msg',
+#                 ErrSite(self.__class__, 'requires - no items specified'),
+#                 self, Missing
+#             )
+#         if self._awaitingTokens:
+#             raise BonesGroupingError(
+#                 f'Encountered GROUP_END without a NAME - better error msg needed',
+#                 ErrSite(self.__class__, 'Encountered GROUP_END without a NAME'),
+#                 self, tokenOrGroup
+#             )
+#         super()._finalise(tokenOrGroup)
+#
+#     @property
+#     def PPGroup(self):
+#         return '{L}'
+#
+#     @property
+#     def PPDebug(self):
+#         return f'{self.PPGroup} - {PPCloser(self._requiredCloser)}'
+#
+#     def _consumeToken(self, tokenOrGroup, indent):                       # works in tandem with parseStructure
+#         # answer self if we consume the token or Missing if we don't
+#         if self._tokens is Missing: raise ProgrammerError()
+#
+#         if self._phraseState == GROUP_END:
+#             self._finalise(tokenOrGroup)
+#             return Missing
+#
+#         stateToStore = Missing
+#
+#         if not isinstance(tokenOrGroup, Token):
+#             raise BonesGroupingError(
+#                 'No groups allowed in load - better error msg needed',
+#                 ErrSite(self.__class__, 'No groups allowed in load'),
+#                 self, tokenOrGroup
+#             )
+#
+#         elif tokenOrGroup.tag is BREAKOUT:
+#             raise BonesGroupingError(
+#                 'No breakouts allowed in load - better error msg needed',
+#                 ErrSite(self.__class__, 'No breakouts allowed in load'),
+#                 self, tokenOrGroup
+#             )
+#
+#         elif tokenOrGroup.tag in (SEMI_COLON, KEYWORD_OR_BIND_LEFT, BIND_RIGHT):
+#             raise BonesGroupingError(
+#                 f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load - better error msg needed',
+#                 ErrSite(self.__class__, f'{prettyNameByTag[tokenOrGroup.tag]} not allowed in load)'),
+#                 self, tokenOrGroup
+#             )
+#
+#         elif tokenOrGroup.tag in (LINE_COMMENT, INLINE_COMMENT, CONTINUATION):
+#             pass
+#
+#         elif tokenOrGroup.tag is LINE_BREAK:
+#             if self._lastLineBreakAndIndent is not Missing:
+#                 self._phraseState = GROUP_END
+#                 self._finalise(tokenOrGroup)
+#                 self.parent._consumeToken(*self._lastLineBreakAndIndent)
+#                 return Missing
+#             # need to store some state to send to the parent if it turns out I shouldn't have consumed this
+#             stateToStore = tokenOrGroup, indent
+#
+#         elif (indent < self._phraseIndent + MIN_INDENT) or tokenOrGroup.tag is DOT:
+#             # any token to the left of the load statement + MIN_INDENT means we are ending the load section
+#             self._phraseState = GROUP_END
+#             self._finalise(tokenOrGroup)
+#             if self._lastLineBreakAndIndent is not Missing:
+#                 self.parent._consumeToken(*self._lastLineBreakAndIndent)
+#             return Missing
+#
+#         elif tokenOrGroup.tag is COMMA:
+#             if self._awaitingTokens:
+#                 raise BonesGroupingError(
+#                     f'Encountered COMMA without a NAME - better error msg needed',
+#                     ErrSite(self.__class__, 'Encountered COMMA without a NAME'),
+#                     self, tokenOrGroup
+#                 )
+#             else:
+#                 self._phrases << self._tokens
+#                 self._tokens = _TokensGL()
+#                 self._awaitingTokens = True
+#
+#         elif tokenOrGroup.tag in (NAME, TEXT):
+#             if self._awaitingTokens:
+#                 self._appendToken(tokenOrGroup, indent)
+#                 self._awaitingTokens = False
+#             else:
+#                 raise BonesGroupingError(
+#                     f'Encountered a NAME or TEXT without a COMMA - better error msg needed',
+#                     ErrSite(self.__class__, 'Encountered NAME without a COMMA'),
+#                     self, tokenOrGroup
+#                 )
+#
+#         else:
+#             raise ProgrammerError(f'{prettyNameByTag[tokenOrGroup.tag]} hasn\'t been handled')
+#
+#         self._lastLineBreakAndIndent = stateToStore
+#         return self
 
 
 

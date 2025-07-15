@@ -63,8 +63,8 @@ Literals include 1D and 2D tuples, structs, values (i.e. integer, decimal, strin
 panels (aka tables), function definitions, blocks (deferred evaluation tuples), type descriptions and assignments. 
 Verbs and nouns are identified by a name. Many literals can contain phrases. A sequence of phrases is termed a snippet.
 
-Python functions decorated with @coppertop may be directly loaded into the kernel via the load statement. Symbols 
-from other modules (including any loaded from Python) may be made available via the import statement.
+Python functions decorated with @coppertop and names from other modules may be directly imported into the module via 
+the import statement.
 
 As well as the common unary style piping, e.g F#'s |> operator, R's magrittr package, and q/kdb and Smalltalk's 
 space separation syntax, bones allows right association in a pipeline (e.g. similar to single argument forms of ~, -, 
@@ -209,7 +209,6 @@ Some sequences are also reserved, i.e. //, <:..>, {...}, {[...]...}, ([...]...)
 
 #### including other code
 ```
-load bones.std                          // loads a module into the kernel
 from bones.std import do, print         // adds the name do and print to this module's scope
 ```
 

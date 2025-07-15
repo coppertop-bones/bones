@@ -6,7 +6,6 @@
 
 // based on https://rosettacode.org/wiki/Ordered_partitions#Python  - the 2nd algo
 
-load dm.core
 from dm.core import ...
 
 

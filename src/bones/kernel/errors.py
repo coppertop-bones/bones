@@ -43,7 +43,7 @@ class BonesAmbiguousOverloadError(BonesError): pass
 
 class BonesUnknownOverloadError(BonesError): pass
 
-class BonesModuleLoadError(BonesError): pass                # load tool.kit
+# class BonesModuleLoadError(BonesError): pass                # load tool.kit
 
 class BonesModuleImportError(BonesError): pass              # e.g. from tools.bag import x - x doesn't exist
 

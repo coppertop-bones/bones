@@ -63,13 +63,13 @@ memory structure is not identical then a type error is flagged.
 **snippet** phrases can be separated by _dot_s or new-lines where the subsequent lines are on the same indentation 
 level, for example.
 ```
-load "adding_library". from adding_library import +. a: 1. b: 2. a + b
+from stdio import stdout. from adding_library import +. a: 1. b: 2. a + b
 ```
 
 is the same list of five phrases as
 
 ```
-load "adding_library"
+from stdio import stdout
 from adding_library import +
 a: 1
 b: 2

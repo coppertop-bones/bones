@@ -7,12 +7,11 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-import itertools, sys, collections, builtins
+import itertools, sys, collections
 
 from bones import jones
 
-from bones.core.sentinels import Missing, Void
-from bones.core.errors import ProgrammerError, handlersByErrSiteId, ErrSite, NotYetImplemented
+from bones.core.errors import handlersByErrSiteId, ErrSite
 from bones.core.context import context
 from bones.kernel.errors import BonesIncompatibleTypesError, BonesModuleImportError
 from bones.kernel import lex
@@ -21,7 +20,6 @@ from bones.kernel.tc import TcReport
 from coppertop.dm.pp import PP
 from bones.ts.select import Family
 from bones.kernel._core import LOCAL_SCOPE, SCRATCH_CTX, GLOBAL_CTX
-from bones.ts.metatypes import BType
 from bones.lang.types import unary, litnum, litint, litsyms, littxt
 from bones.kernel.sym_manager import SymManager
 from bones.kernel.symbol_table import SymbolTable
@@ -29,8 +27,17 @@ from bones.kernel.stack_manager import StackManager, bframe
 from bones.kernel.globals_manager import GlobalsManager
 from bones.kernel.code_manager import CodeManager
 from bones.kernel.contextual_scope_manager import ContextualScopeManager
-from bones.kernel.tc_interpreter import TCInterpreter
-
+from bones.kernel.tc import tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
+    tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock
+from bones.lang.types import _tvfunc
+from bones.kernel._core import MODULE_SCOPE
+from bones.kernel.symbol_table import Overload
+from bones.core.sentinels import Missing, Void
+from bones.core.errors import NotYetImplemented, ProgrammerError
+from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
+from bones.core.context import context
+from bones.ts.select import _typeOf
+import bones.kernel.tc
 
 
 pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
@@ -39,20 +46,21 @@ pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')
 class BonesKernel:
 
     __slots__ = [
-        'sm',
-        'stackManager', 'globalsManager', 'codeManager', 'contextualScopeManager', 'parsers', 'symbolManager',
-        'ctxs', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache', 'tcrunner',
-        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons',
+        'stackManager', 'globalsManager', 'codeManager', 'contextualScopeManager', 'symbolManager',
+        'ctxs', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache',
+        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons', 'syms',
+        '_holderByModPathByName', '_frameBySymTab', 'stack'
     ]
 
     def __init__(self, *, litdateCons, litsymCons, littupCons, litstructCons, litframeCons):
 
-        self.sm = PythonStorageManager()
+        self._holderByModPathByName = {}
+        self._frameBySymTab = {}
+        self.stack = []
         self.stackManager = StackManager()
         self.globalsManager = GlobalsManager()
         self.codeManager = CodeManager()
         self.contextualScopeManager = ContextualScopeManager()
-        self.parsers = Parsers(self)
         self.symbolManager = SymManager()
 
         self.ctxs = {}
@@ -67,19 +75,18 @@ class BonesKernel:
         self.littupCons = littupCons
         self.litstructCons = litstructCons
         self.litframeCons = litframeCons
-        self.tcrunner = Missing
         self.scratch = Missing
 
         self.ctxs[GLOBAL_CTX] = SymbolTable(self, Missing, Missing, Missing, Missing, GLOBAL_CTX)
         self.ctxs[SCRATCH_CTX] = scratchCtx = SymbolTable(self, Missing, Missing, Missing, self.ctxs[GLOBAL_CTX], SCRATCH_CTX)
         self.scratch = scratchCtx
-        self.tcrunner = TCInterpreter(self, scratchCtx)
-        self.sm.frameForSymTab(self.ctxs[GLOBAL_CTX])
-        self.sm.frameForSymTab(self.ctxs[SCRATCH_CTX])
+        self.frameForSymTab(self.ctxs[GLOBAL_CTX])
+        self.frameForSymTab(self.ctxs[SCRATCH_CTX])
 
 
     def styleForName(self, name):
         return self.styleByName.get(name, unary)
+
 
     def dumpLines(self, srcId, l1, l2):
         l1 = max(l1, 1)
@@ -88,6 +95,7 @@ class BonesKernel:
         for l in range(l1, l2 + 1):
             s1, s2 = lines[l].s1, lines[l].s2
             print(src[s1:s2], file=sys.stderr)
+
 
     def pace(self, src, stopAtLine=Missing):
         srcId = next(self.nextSrcId)
@@ -160,34 +168,30 @@ class BonesKernel:
         # execute
         run = True if context.run is Missing else context.run
         if run and not grammarError:
-            answer = self.tcrunner.executeTc(snippetTc)
+            answer = self.executeTc(snippetTc)
         else:
             answer = Void
 
         return pace_res(tokens, typesReport, answer, grammarError)
 
 
-
     def loadModules(self, paths):
-        # i.e. searches PYTHON_PATH and BONES_PATH for bones/ex/ and load core.py or core.b
-        for path in paths:
-            root = __import__(path)
-            names = path.split(".")
-            modPath = names[0]
-            mod = root
+        # OPEN: remove load from bones
+        pass
+
+    def importSymbols(self, path, names, symtab):
+        if (mod := self.modByPath.get(path, Missing)) is Missing:
+            # OPEN: search BONES_PATH too as well as PYTHON_PATH
+            mod = __import__(path)
+            splits = path.split(".")
+            modPath = splits[0]
             if modPath not in self.modByPath:
                 self.modByPath[modPath] = mod
-            for name in names[1:]:
+            for name in splits[1:]:
                 modPath = modPath + '.' + name if modPath else name
                 mod = getattr(mod, name)
                 if modPath not in self.modByPath:
                     self.modByPath[modPath] = mod
-
-
-
-    def importSymbols(self, path, names, symtab):
-        if (mod := self.modByPath.get(path, Missing)) is Missing:
-            raise BonesModuleImportError(f"Can't import {names} because '{path}' has not been loaded.", ErrSite("Module not loaded"))
         for name in names:
             importee = Missing
             if hasattr(mod, name):
@@ -242,7 +246,6 @@ class BonesKernel:
                 raise ProgrammerError()
 
 
-
     def importValues(self, path, names, symtab):
         nvs = {}
         if (mod := self.modByPath.get(path, Missing)) is Missing:
@@ -275,22 +278,13 @@ class BonesKernel:
 
         return nvs
 
-
-class PythonStorageManager:
-    __slots__ = ('syms', '_holderByModPathByName', '_frameBySymTab', 'stack')
-
-    def __init__(self):
-        self._holderByModPathByName = {}
-        self._frameBySymTab = {}
-        self.stack = []
-
     def frameForSymTab(self, symtab):
         if (frame := self._frameBySymTab.get(symtab, Missing)) is Missing:
             self._frameBySymTab[symtab] = frame = bframe(symtab, Missing)
         return frame
 
     def blockframeForSymTab(self, symtab, parent, argnames, ):
-        self.symtab, k.sm.stack[-1], self.argnames, self._tArgs, k.sm.frameForSymTab(self.symtab)
+        self.symtab, self.stack[-1], self.argnames, self._tArgs, self.frameForSymTab(self.symtab)
 
     def pushFrame(self, symtab):
         if self.stack:
@@ -350,12 +344,6 @@ class PythonStorageManager:
     #         if ov is Missing: raise ProgrammerError()
     #     return ov
 
-
-
-class Parsers:
-    def __init__(self, k):
-        self.k = k
-
     def parseLitInt(self, s):
         return litint(s)
 
@@ -378,11 +366,140 @@ class Parsers:
         return littxt(s[1:-1])  # OPEN: strip the quotes in lex instead
 
     def parseSym(self, s):
-        return self.k.symbolManager.Sym(s)
+        return self.symbolManager.Sym(s)
 
     def parseLitSyms(self, ss):
-        return litsyms([self.k.symbolManager.Sym(s) for s in ss])
+        return litsyms([self.symbolManager.Sym(s) for s in ss])
 
+    def executeTc(self, snippet):
+        bones.kernel.tc.k = self.k
+        answer = Void
+        for i, n in enumerate(snippet.nodes):
+            # context.tt  << i + 1
+            answer = self.ex(n)
+            if answer == None: answer = Void
+        bones.kernel.tc.k = Missing
+        return answer
+
+    def ex(self, n):
+        if context.traceTcExec:
+            print(f'Executing node: {n}')
+
+        if isinstance(n, tcapply):
+            # context.tt << f'tcapply {n}'
+            numargs = len(n.argnodes)
+            ov = self.getOverload(n.symtab, n.fnnode.scope, n.fnnode.name, numargs)
+            args = [self.ex(argnode) for argnode in n.argnodes]
+            if isinstance(ov, list):
+                # the list thing needs sorting out
+                ov = ov[numargs]
+            if isinstance(ov, Overload):
+                fn, schemaVars, distance = ov.selectFunction(*[_typeOf(arg) for arg in args])
+            elif isinstance(ov, tcfunc):
+                fn = ov
+            else:
+                raise ProgrammerError()
+
+            if isinstance(fn, (tcfunc, tcblock)):
+                return self.ex(fn)(*args)
+
+            elif isinstance(fn, _tvfunc):
+                if fn.pass_tByT:
+                    ret = fn._v(*args, tByT=schemaVars)
+                else:
+                    ret = fn._v(*args)
+                if hasattr(ret, '_t'):
+                    if ret._t:
+                        # check the actual return type fits the declared return type
+                        if fn.tRet == py or fitsWithin(ret._t, fn.tRet):
+                            return ret
+                        else:
+                            return ret
+                            raise BTypeError(f"Return type mismatch: expected {fn.tRet}, got {ret._t}")
+                    else:
+                        return ret | fn.tRet
+                else:
+                    # use the coercer rather than impose construction with tv
+                    if fitsWithin(_typeOf(ret), fn.tRet):
+                        return ret
+                    else:
+                        return ret #| fn.tRet
+
+            else:
+                raise ProgrammerError(f"Unhandled  fn {{{type(fn)}}}")
+
+        elif isinstance(n, tcbindval):
+            # context.tt << f'tcbindval {n}'
+            if n.accessors:
+                raise NotYetImplemented()
+            else:
+                val = self.ex(n.vnode)
+                self.bind(n.symtab, n.scope, n.name, val)
+                return val
+
+        elif isinstance(n, tcgetval):
+            # context.tt << f'tcgetval {n}'
+            v = self.getValue(n.symtab, n.scope, n.name)
+            v = getattr(v, '_tv', Missing) or v                       # in case it is a boxed value
+            for accessor in n.accessors:
+                # OPEN: still a mess
+                if hasattr(v, '__getitem__'):
+                    v = v[self.syms.Sym(accessor)]
+                else:
+                    v = getattr(v, accessor)
+                v = getattr(v, '_tv', Missing) or v
+            return v
+
+        # elif isinstance(n, tcgetoverload):
+        #     fnMeta = n.symtab.fMetaForGet(n.name, n.scope)
+        #     return fnMeta.symtab.getOverload(n.name, n.numargs)
+
+        elif isinstance(n, tcgetfamily):
+            # context.tt << f'tcgetfamily {n}'
+            fnMeta = n.symtab.fMetaForGet(n.name, n.scope)
+            return fnMeta.symtab.getFamily(n.name)
+
+        elif isinstance(n, tclit):
+            return n.tv
+
+        elif isinstance(n, tclitstruct):
+            kvs = {}
+            for k, v in n.tv._kvs():
+                kvs[k] = self.ex(v)
+            answer = self.litstructCons(n.tOut, kvs)
+            return answer
+
+        elif isinstance(n, tclittup):
+            elems = [self.ex(e) for e in n.tv._v]
+            answer = self.littupCons(n.tOut, elems)
+            return answer
+
+        elif isinstance(n, tclitbtype):
+            return n.tOut
+
+        elif isinstance(n, tcfunc):
+            return n
+
+        elif isinstance(n, tcblock):
+            raise NotYetImplemented(f"tcblock {n}")
+            return blockctx(n, self.stack[-1])
+
+        elif isinstance(n, tcbindfn):
+            # only needed to be done at parse time
+            pass
+
+        elif isinstance(n, tcload):
+            # only needed to be done at parse time
+            pass
+
+        elif isinstance(n, tcfromimport):
+            # symbols, type holders and functions are gotten at parse time, but values must be loaded at execution time
+            nvs = self.importValues(n.path, n.names, n.symtab)
+            for name, v in nvs.items():
+                self.bind(n.symtab, MODULE_SCOPE, name, v)
+
+        else:
+            raise NotYetImplemented(f"Unhandled node {{{n}}}")
 
 handlersByErrSiteId.update({
     ('bones.kernel.core', Missing, 'importSymbols', "Can't find name") : '...',

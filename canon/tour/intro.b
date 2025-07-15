@@ -11,10 +11,6 @@
 -/
 
 
-// we can tell the kernel to load other libraries - this make names available in the namespace they are defined
-load tlib.stats
-load tlib.core              // in all likelihood core was loaded by stats but let's ensure it
-
 // we can import names from other namespaces into our local scope
 from tlib.misc import ...   // "..." here means that every function in tlib.core is added to our module namespace
 

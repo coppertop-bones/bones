@@ -1,6 +1,5 @@
 // PGM course example
 
-load dm.core, dm.pgm
 from dm.core import ...
 from dm.pgm import BayesNet, P, PP
 

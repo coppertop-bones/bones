@@ -4,7 +4,6 @@
 // addressOf returns the address in memory right at the instant of a bones object (NB consider the idea that an address
 // is not of the same essence as a pointer)
 
-load dm, linalg, tdd, ctesting, fred
 from dm import ...
 from linalg import mmul, asMatrix, T
 from tdd import check

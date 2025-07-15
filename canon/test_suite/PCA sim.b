@@ -1,4 +1,3 @@
-load dm.linalg, dm.linalg.decomp, dm.core.io
 from dm.linalg import ...   // defines matrix and vector
 from dm.linalg.decomp import Cholesky :CH, SVD, Eigen, QR: QRHouseholder
 from dm.core.io import stdout, NL

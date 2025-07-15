@@ -31,13 +31,13 @@ from bones.kernel.lex import Token, prettyNameByTag, \
     CONTEXT_NAME, CONTEXT_BIND_RIGHT, \
     GLOBAL_NAME, GLOBAL_BIND_RIGHT, KEYWORD_OR_BIND_LEFT, ELLIPSES
 from bones.kernel.parse_groups import \
-    LoadGrp, FromImportGrp, \
+    FromImportGrp, \
     FuncOrStructGrp, TupParenOrDestructureGrp, BlockGrp, \
     TypelangGrp, \
     FrameGrp, _SemiColonSepCommaSepDotSepGL, SemiColonSepCommaSep, _DotOrCommaSepGL, _CommaSepDotSepGL
 from bones.kernel.symbol_table import VMeta, FnMeta, fnSymTab, blockSymTab
-from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, tcload, tcfromimport, \
-    tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
+from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverload, tcsnippet, tcapply, tcfunc, \
+    tcfromimport, tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.kernel._core import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
 from bones.lang.types import TBI, littup
@@ -303,11 +303,11 @@ def parseSingle(t, symtab, k):
             else:
                 return tcgetfamily(t.tok1, meta.symtab, name, LOCAL_SCOPE)
         elif tag == INTEGER:
-            return tclit(t.tok1, symtab, k.parsers.parseLitInt(t.src))
+            return tclit(t.tok1, symtab, k.parseLitInt(t.src))
         elif tag == DECIMAL:
-            return tclit(t.tok1, symtab, k.parsers.parseLitNum(t.src))
+            return tclit(t.tok1, symtab, k.parseLitNum(t.src))
         elif tag == TEXT:
-            return tclit(t.tok1, symtab, k.parsers.parseLitUtf8(t.src))
+            return tclit(t.tok1, symtab, k.parseLitUtf8(t.src))
         else:
             missingTag = prettyNameByTag[tag]
             raise NotYetImplemented()
@@ -454,27 +454,27 @@ def parsePhrase(tokens, symtab, k):
                     tokens >> 1
 
             elif tag == INTEGER:
-                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitInt(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parseLitInt(t.src))
                 tokens >> 1
 
             elif tag == DECIMAL:
-                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitNum(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parseLitNum(t.src))
                 tokens >> 1
 
             elif tag == TEXT:
-                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitUtf8(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parseLitUtf8(t.src))
                 tokens >> 1
 
             elif tag == SYM:
-                tcnode = tclit(t.tok1, symtab, k.litsymCons(k.parsers.parseSym(t.src)))
+                tcnode = tclit(t.tok1, symtab, k.litsymCons(k.parseSym(t.src)))
                 tokens >> 1
 
             elif tag == SYMS:
-                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitSyms(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parseLitSyms(t.src))
                 tokens >> 1
 
             elif tag == DATE:
-                tcnode = tclit(t.tok1, symtab, k.parsers.parseLitDate(t.src))
+                tcnode = tclit(t.tok1, symtab, k.parseLitDate(t.src))
                 tokens >> 1
 
             elif tag in (
@@ -502,7 +502,7 @@ def parsePhrase(tokens, symtab, k):
                     vs, names, ts = [], [], []
                     for phrase in t.phrases:
                         v, nameToken = phrase[:-1], phrase[-1]
-                        names.append(k.parsers.parseSym(nameToken.src))
+                        names.append(k.parseSym(nameToken.src))
                         tcnode = parsePhrase(v, symtab, k)
                         vs.append(tcnode)
                         ts.append(tcnode.tOut)
@@ -610,16 +610,6 @@ def parsePhrase(tokens, symtab, k):
 
             elif isinstance(t, FrameGrp):
                 raise NotYetImplemented()
-
-            elif isinstance(t, LoadGrp):
-                # i.e. searches PYTHON_PATH and BONES_PATH for bones/ex/ and load core.py or core.b
-                paths = []
-                for phrase in t.phrases:
-                    for tok in phrase:
-                        paths.append(tok.src)
-                tcnode = tcload(t.tok1, t.tok2, symtab, paths)
-                k.loadModules(tcnode.paths)
-                tokens >> 1
 
             elif isinstance(t, FromImportGrp):
                 names = []

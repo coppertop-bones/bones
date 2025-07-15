@@ -137,7 +137,6 @@ _..                 - accessing global scope
 ^^                  - block / function exit
 ^^^                 - block / function exit
 !!                  - signalling
-load ...            - load a module
 from ... import ... - import names into a module namespace
 ...                 - elipsis
 ```

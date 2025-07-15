@@ -14,7 +14,7 @@
 # tcbindval, tcgetval, tcbindfn, tcgetfamily, tcgetoverload
 # tclit, tclittup, tclitstruct, tclitframe, tclitbtype
 # tcvoidphrase
-# tcload, tcfromimport
+# tcfromimport
 
 
 import sys
@@ -167,13 +167,13 @@ class tcfunc(tcblock):
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
         # this allows the function to be called as a normal function from Python
-        frame = k.sm.pushFrame(self.symtab)
+        frame = k.pushFrame(self.symtab)
         for name, arg in zip(self.argnames, args):
-            k.sm.bind(frame.symtab, LOCAL_SCOPE, name, arg)
+            k.bind(frame.symtab, LOCAL_SCOPE, name, arg)
         for n2 in self.body:
             val = k.tcrunner.ex(n2)
-        if (ret := k.sm.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
-        k.sm.popFrame()
+        if (ret := k.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+        k.popFrame()
         return ret
     def ppSig(self):
         nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
@@ -365,16 +365,6 @@ class tcvoidphrase(tcnode):
     def __init__(self, tok1, tok2, symtab):
         super().__init__(tok1, tok2, symtab)
         self.tOut = void
-
-class tcload(tcnode):
-    def __init__(self, tok1, tok2, symtab, paths):
-        super().__init__(tok1, tok2, symtab)
-        self.tOut = void
-        self.paths = paths
-    def PPTC(self, depth, report):
-        report << TcReportLine(self, depth, f'load {self.paths}')
-    def __repr__(self):
-        return f"tcload: {self.nodepath}"
 
 class tcfromimport(tcnode):
     __slots__ = ['path', 'names']

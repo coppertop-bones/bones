@@ -50,6 +50,19 @@ from bones.kernel._core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_S
 # }
 
 
+# getSlot(scope, name)
+#  global (includes modules) must be done per thread - global ky value map
+#  local - in stack-frame
+#  contextual - heap - hash map?
+
+# symbol table must know compilers understanding of the type of every name
+# in union the slot must also keep the type (two slots for python system?) boxed by bones
+# heap objects must be boxed
+
+# module and global scope can get slot from a global generator
+# function and block scopes can get slot from a local generator - one per
+
+
 
 
 # SymbolTable
@@ -110,7 +123,6 @@ class _Meta:
 class VMeta(_Meta): pass
 class FnMeta(_Meta): pass
 class TMeta(_Meta): pass
-
 
 
 class SymbolTable:
