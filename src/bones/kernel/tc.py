@@ -22,14 +22,14 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 import itertools, collections
 from bones.core.sentinels import Missing
+from bones.core.context import context
 from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
+from bones.core.utils import assertIs
 from bones.ts.metatypes import BType, BTFn, BTTuple
 from bones.lang.types import void, TBI, nullary
 from bones.kernel._core import LOCAL_SCOPE, RET_VAR_NAME
 
 _nodeseed = itertools.count(start=1)
-
-k = Missing
 
 
 
@@ -167,13 +167,13 @@ class tcfunc(tcblock):
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
         # this allows the function to be called as a normal function from Python
-        frame = k.pushFrame(self.symtab)
+        frame = context.k.pushFrame(self.symtab)
         for name, arg in zip(self.argnames, args):
-            k.bind(frame.symtab, LOCAL_SCOPE, name, arg)
+            context.k.bind(frame.symtab, LOCAL_SCOPE, name, arg)
         for n2 in self.body:
-            val = k.tcrunner.ex(n2)
-        if (ret := k.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
-        k.popFrame()
+            val = context.k.tcrunner.ex(n2)
+        if (ret := context.k.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+        context.k.popFrame()
         return ret
     def ppSig(self):
         nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
@@ -392,13 +392,6 @@ class TcReport(list):
         for e in other:
             self.append(e)
         return self
-
-class assertIs:
-    def __init__(self, type):
-        self.type = type
-    def __rrshift__(self, lhs):     # lhs >> self
-        if not isinstance(lhs, self.type): raise ValueError()
-        return lhs
 
 
 handlersByErrSiteId.update({

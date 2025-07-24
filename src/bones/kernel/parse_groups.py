@@ -408,7 +408,7 @@ def parseStructure(tokens, symtab, src, TRACE=False):
                 currentG.tl = src[currentG.s1+2:currentG.s2-1]
             if isinstance(currentG, ParametersGrp):
                 for p in currentG.phrases:
-                    if len(p) != 1: 1/0
+                    assert len(p) == 1
                     p = p[0]
                     if p.typePhrase:
                         p.tl = src[p.typePhrase[0].s1:p.typePhrase[-1].s2]

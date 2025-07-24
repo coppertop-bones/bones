@@ -12,10 +12,10 @@ SCRATCH_CTX = 'scratch'
 
 RET_VAR_NAME = "__RET__"
 
-LOCAL_SCOPE = 1       # e.g. fred - r/w - may be polymorphic
-PARENT_SCOPE = 2      # e.g. .fred - r/o
-MODULE_SCOPE = 3      # e.g. ..MAX_ITER - r/o
-CONTEXT_SCOPE = 4     # e.g. _.fred - r/w - fully typed as it may be confusing to type on first usage
-GLOBAL_SCOPE = 5      # e.g. _..fred - r/w - fully typed as it may be confusing to type on first usage
+LOCAL_SCOPE = 'LOCAL'           # e.g. fred - r/w - may be polymorphic
+PARENT_SCOPE = 'PARENT'         # e.g. .fred - r/o
+MODULE_SCOPE = 'MODULE'         # e.g. ..MAX_ITER - r/o
+CONTEXT_SCOPE = 'CONTEXTUAL'    # e.g. _.fred - r/w - fully typed as it may be confusing to type on first usage
+GLOBAL_SCOPE = 'GLOBAL'         # e.g. _..fred - r/w - fully typed as it may be confusing to type on first usage
 
 MAX_NUM_ARGS = 10

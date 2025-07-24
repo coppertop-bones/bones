@@ -16,27 +16,23 @@ from bones.core.context import context
 from bones.kernel.errors import BonesIncompatibleTypesError, BonesModuleImportError
 from bones.kernel import lex
 from bones.kernel import parse_phrase, parse_groups
-from bones.kernel.tc import TcReport
 from coppertop.dm.pp import PP
-from bones.ts.select import Family
 from bones.kernel._core import LOCAL_SCOPE, SCRATCH_CTX, GLOBAL_CTX
 from bones.lang.types import unary, litnum, litint, litsyms, littxt
 from bones.kernel.sym_manager import SymManager
-from bones.kernel.symbol_table import SymbolTable
+from bones.kernel.symbol_table import GlobalSymTab, ModSymTab
 from bones.kernel.stack_manager import StackManager, bframe
 from bones.kernel.globals_manager import GlobalsManager
 from bones.kernel.code_manager import CodeManager
 from bones.kernel.contextual_scope_manager import ContextualScopeManager
 from bones.kernel.tc import tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
-    tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock
-from bones.lang.types import _tvfunc
+    tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock, TcReport
 from bones.kernel._core import MODULE_SCOPE
-from bones.kernel.symbol_table import Overload
 from bones.core.sentinels import Missing, Void
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
 from bones.core.context import context
-from bones.ts.select import _typeOf
+from bones.ts.select import _typeOf, tvoverload, tvfunc, tvfamily
 import bones.kernel.tc
 
 
@@ -48,7 +44,7 @@ class BonesKernel:
     __slots__ = [
         'stackManager', 'globalsManager', 'codeManager', 'contextualScopeManager', 'symbolManager',
         'ctxs', 'modByPath', 'styleByName', 'srcById', 'linesById', 'nextSrcId', 'infercache',
-        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons', 'syms',
+        'scratch', 'litdateCons', 'litsymCons', 'littupCons', 'litstructCons', 'litframeCons',
         '_holderByModPathByName', '_frameBySymTab', 'stack'
     ]
 
@@ -77,8 +73,8 @@ class BonesKernel:
         self.litframeCons = litframeCons
         self.scratch = Missing
 
-        self.ctxs[GLOBAL_CTX] = SymbolTable(self, Missing, Missing, Missing, Missing, GLOBAL_CTX)
-        self.ctxs[SCRATCH_CTX] = scratchCtx = SymbolTable(self, Missing, Missing, Missing, self.ctxs[GLOBAL_CTX], SCRATCH_CTX)
+        self.ctxs[GLOBAL_CTX] = GlobalSymTab(GLOBAL_CTX)
+        self.ctxs[SCRATCH_CTX] = scratchCtx = ModSymTab(SCRATCH_CTX, self.ctxs[GLOBAL_CTX])
         self.scratch = scratchCtx
         self.frameForSymTab(self.ctxs[GLOBAL_CTX])
         self.frameForSymTab(self.ctxs[SCRATCH_CTX])
@@ -175,10 +171,6 @@ class BonesKernel:
         return pace_res(tokens, typesReport, answer, grammarError)
 
 
-    def loadModules(self, paths):
-        # OPEN: remove load from bones
-        pass
-
     def importSymbols(self, path, names, symtab):
         if (mod := self.modByPath.get(path, Missing)) is Missing:
             # OPEN: search BONES_PATH too as well as PYTHON_PATH
@@ -222,7 +214,7 @@ class BonesKernel:
                         symtab.defTMeta(name, importee)
             elif isinstance(importee, jones._fn):
                 symtab.defFnMeta(name, importee.d._t, LOCAL_SCOPE)
-                if isinstance(importee.d, Family):
+                if isinstance(importee.d, tvfamily):
                     for overload in importee.d._overloadByNumArgs:
                         for _, tvfunc in overload.items():
                             style = tvfunc.style
@@ -372,13 +364,12 @@ class BonesKernel:
         return litsyms([self.symbolManager.Sym(s) for s in ss])
 
     def executeTc(self, snippet):
-        bones.kernel.tc.k = self.k
-        answer = Void
-        for i, n in enumerate(snippet.nodes):
-            # context.tt  << i + 1
-            answer = self.ex(n)
-            if answer == None: answer = Void
-        bones.kernel.tc.k = Missing
+        with context(kernel=self):
+            answer = Void
+            for i, n in enumerate(snippet.nodes):
+                # context.tt  << i + 1
+                answer = self.ex(n)
+                if answer == None: answer = Void
         return answer
 
     def ex(self, n):
@@ -393,7 +384,8 @@ class BonesKernel:
             if isinstance(ov, list):
                 # the list thing needs sorting out
                 ov = ov[numargs]
-            if isinstance(ov, Overload):
+
+            if isinstance(ov, tvoverload):
                 fn, schemaVars, distance = ov.selectFunction(*[_typeOf(arg) for arg in args])
             elif isinstance(ov, tcfunc):
                 fn = ov
@@ -403,27 +395,12 @@ class BonesKernel:
             if isinstance(fn, (tcfunc, tcblock)):
                 return self.ex(fn)(*args)
 
-            elif isinstance(fn, _tvfunc):
+            elif isinstance(fn, tvfunc):
                 if fn.pass_tByT:
-                    ret = fn._v(*args, tByT=schemaVars)
+                    ret = fn(*args, tByT=schemaVars)
                 else:
-                    ret = fn._v(*args)
-                if hasattr(ret, '_t'):
-                    if ret._t:
-                        # check the actual return type fits the declared return type
-                        if fn.tRet == py or fitsWithin(ret._t, fn.tRet):
-                            return ret
-                        else:
-                            return ret
-                            raise BTypeError(f"Return type mismatch: expected {fn.tRet}, got {ret._t}")
-                    else:
-                        return ret | fn.tRet
-                else:
-                    # use the coercer rather than impose construction with tv
-                    if fitsWithin(_typeOf(ret), fn.tRet):
-                        return ret
-                    else:
-                        return ret #| fn.tRet
+                    ret = fn(*args)
+                return ret
 
             else:
                 raise ProgrammerError(f"Unhandled  fn {{{type(fn)}}}")
@@ -444,7 +421,7 @@ class BonesKernel:
             for accessor in n.accessors:
                 # OPEN: still a mess
                 if hasattr(v, '__getitem__'):
-                    v = v[self.syms.Sym(accessor)]
+                    v = v[self.symbolManager.Sym(accessor)]
                 else:
                     v = getattr(v, accessor)
                 v = getattr(v, '_tv', Missing) or v
@@ -488,10 +465,6 @@ class BonesKernel:
             # only needed to be done at parse time
             pass
 
-        elif isinstance(n, tcload):
-            # only needed to be done at parse time
-            pass
-
         elif isinstance(n, tcfromimport):
             # symbols, type holders and functions are gotten at parse time, but values must be loaded at execution time
             nvs = self.importValues(n.path, n.names, n.symtab)
@@ -500,6 +473,8 @@ class BonesKernel:
 
         else:
             raise NotYetImplemented(f"Unhandled node {{{n}}}")
+
+
 
 handlersByErrSiteId.update({
     ('bones.kernel.core', Missing, 'importSymbols', "Can't find name") : '...',

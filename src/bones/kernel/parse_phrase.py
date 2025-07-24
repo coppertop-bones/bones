@@ -40,10 +40,9 @@ from bones.kernel.tc import tclit, tcvoidphrase, tcbindval, tcgetval, tcgetoverl
     tcfromimport, tcbindfn, tcgetfamily, tcassumedfunc, tclitstruct, tclittup, tclitframe, tcblock, tclitbtype
 from bones.ts.metatypes import BTTuple, BTStruct
 from bones.kernel._core import LOCAL_SCOPE, PARENT_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE
-from bones.lang.types import TBI, littup
+from bones.lang.types import TBI
 from bones.kernel.parse_groups import DESTRUCTURE, TUPLE_NULL, TUPLE_2D, TUPLE_OR_PAREN, TUPLE_0_EMPTY, STRUCT, \
     TUPLE_1_EMPTY, TUPLE_2_EMPTY, TUPLE_3_EMPTY, TUPLE_4_PLUS_EMPTY, UNARY, BINARY, UNARY_OR_STRUCT
-from bones.ts.type_lang import TypeLangInterpreter
 from bones.ts.metatypes import BType
 
 
@@ -123,7 +122,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
     if isinstance(fOrName, (tcfunc, tcblock)):
         style = fOrName.literalstyle
     else:
-        style = symtab.styleOfName(fOrName)
+        style = k.styleForName(fOrName)
 
     if tcnode is Missing:
         # possibilities
@@ -189,7 +188,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
     elif style is unary:
         # noun unary            (unary may have tuples afterward)
         if len(tokens) > 1 and isinstance(postUnaryTok := tokens[1], TupParenOrDestructureGrp):
-            tup = parseTupParenOrDestructureGroup(postUnaryTok, symtab, k.sm)
+            tup = parseTupParenOrDestructureGroup(postUnaryTok, symtab, k)
             tupleType = postUnaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
                 # noun unary (...)
@@ -217,7 +216,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
         if len(tokens) < 2: raise BonesPhraseError("incomplete phrase - {noun, binary} is missing args after the binary")
         postBinaryTok = tokens[1]
         if isinstance(postBinaryTok, TupParenOrDestructureGrp):
-            tup = parseTupParenOrDestructureGroup(postBinaryTok, symtab, k.sm)
+            tup = parseTupParenOrDestructureGroup(postBinaryTok, symtab, k)
             tupleType = postBinaryTok.tupleType
             if tupleType == TUPLE_OR_PAREN:
                 # noun binary (arg2)
@@ -248,7 +247,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
         # handle token after ternary
         tok = tokens[i]
         if isinstance(tok, TupParenOrDestructureGrp):
-            tup = parseTupParenOrDestructureGroup(tok, symtab, k.sm)
+            tup = parseTupParenOrDestructureGroup(tok, symtab, k)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
                 # e.g. of form `noun ternary (arg2) arg3`
@@ -268,7 +267,7 @@ def buildFnApplication(tcnode, ctxWithFn, fOrName, symtab, tokens, k):
         # handle token after arg2
         tok = tokens[i]
         if isinstance(tok, TupParenOrDestructureGrp):
-            tup = parseTupParenOrDestructureGroup(tok, symtab, k.sm)
+            tup = parseTupParenOrDestructureGroup(tok, symtab, k)
             tupleType = tok.tupleType
             if tupleType == TUPLE_OR_PAREN:
                 # e.g. of form `noun ternary arg2 (arg3)`
@@ -315,7 +314,7 @@ def parseSingle(t, symtab, k):
         return parsePhrase([t], symtab, k)
 
 
-def parseParameters(params, fnctx, k):
+def parseParameters(params, fnctx):
     argnames = []
     tArgs = []
     for tokens in params.phrases:
@@ -524,7 +523,7 @@ def parsePhrase(tokens, symtab, k):
                         tArgs = [TBI] * len(argnames)
                         tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
                     else:
-                        argnames, tArgs = parseParameters(t._params, fnSt, k.sm)
+                        argnames, tArgs = parseParameters(t._params, fnSt)
                         tRet = TBI if t._tRet is Missing else BType(t._tRet.tl)
                         body = [parsePhrase(phrase, fnSt, k) for phrase in t.phrases]
                     if t._unaryBinaryOrStruct == UNARY: style = unary
@@ -534,7 +533,7 @@ def parsePhrase(tokens, symtab, k):
                     f = tcfunc(t.tok1, t.tok1, fnSt, argnames, BTTuple(*tArgs), tRet, body, style)
                     # tokens[0] = f
                     # OPEN: handle style conversion and assignment (as we're not always calling a function)
-                    tcnode, numConsumed = buildFnApplication(tcnode, Missing, f, symtab, tokens[0:], k.sm)
+                    tcnode, numConsumed = buildFnApplication(tcnode, Missing, f, symtab, tokens[0:], k)
                     tokens >> numConsumed
 
             elif isinstance(t, TupParenOrDestructureGrp):
@@ -594,7 +593,7 @@ def parsePhrase(tokens, symtab, k):
                 if t._params is Missing:
                     argnames, tArgs = [], []
                 else:
-                    argnames, tArgs = parseParameters(t._params, blockSt, k.sm)
+                    argnames, tArgs = parseParameters(t._params, blockSt)
                 bodyGrid, tRetGrid = [], []
                 for i, row in enumerate(t._grid):
                     bodyRow, tRetRow = [], []

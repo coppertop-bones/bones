@@ -14,13 +14,12 @@ from bones.core.context import context
 from bones.core.sentinels import Missing
 from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.kernel.errors import BonesScopeAccessError
-from bones.lang.types import _tvfunc, TBI
+from bones.lang.types import TBI
 from bones.kernel.tc import tcfunc, tcblock
-from bones.ts.select import Overload, Family
+from bones.ts.select import tvfunc, tvoverload, tvfamily
 from bones.kernel._core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE
 
 
-# SymbolTable
 # The purpose of the symbol table is to map a name (symbol) into the overall structure of the program. For example, in
 # C a name in a block could be defined in the block scope, the parent block scope, ..., enclosing function scope or
 # global scope. In a Python a name in a function can be found in the function's env, in a parent function, ..., module.
@@ -65,7 +64,6 @@ from bones.kernel._core import MAX_NUM_ARGS, GLOBAL_SCOPE, LOCAL_SCOPE, PARENT_S
 
 
 
-# SymbolTable
 #   holds all information for symbols
 #   holds the actual callable functions defined in it
 #   (values are stored by the storage manager)
@@ -125,39 +123,34 @@ class FnMeta(_Meta): pass
 class TMeta(_Meta): pass
 
 
-class SymbolTable:
+
+
+class _SymTab:
 
     __slots__ = [
-        'name', 'kernel',
-        '_lexicalParentSymTab', '_contextSymTab', '_moduleSymTab', '_globalSymTab',
+        'name',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
         '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newFamilyByName',
         'implicitParams', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
         '_globalGets', '_localSets', '_contextSets', '_globalSets'
     ]
 
-    @property
-    def _pycharmVars(self):
-        return dict(name=self.name, kernel=self.kernel)
+    # @property
+    # def _pycharmVars(self):
+    #     return dict(name=self.name, kernel=self.kernel)
 
-    def __init__(self, kernel, lexicalParentSt, contextSt, moduleSt, globalSt, name):
-        # if a module then moduleSt and lexicalParentSt will be missing
-        # if a top level function then lexicalParentSt will be missing
+    def __init__(self, name):
+
         self.name = 'anon'+str(next(_anonSeed)) if name is Missing else name
-        self.kernel = kernel
-        self._lexicalParentSymTab = lexicalParentSt
-        self._contextSymTab = contextSt
-        self._moduleSymTab = moduleSt
-        self._globalSymTab = globalSt
 
         self._vMetaByName = {}
         self._fnMetaByName = {}
-        self._tMetaByName = Missing if globalSt else {}     # protect ourselves slightly here
+        self._tMetaByName = {}
         self._overloadsByNumArgs = [{} for i in range(MAX_NUM_ARGS + 1)]
 
         self._newVMetaByName = {}
         self._newFnMetaByName = {}
-        self._newTMetaByName = Missing if globalSt else {}  # and here
+        self._newTMetaByName = {}
         self._newFamilyByName = {}
 
         self.implicitParams = []
@@ -173,9 +166,6 @@ class SymbolTable:
         self._globalSets = set()
 
 
-    def styleOfName(self, name):
-        return self.kernel.styleForName(name)
-
     def hasF(self, name):
         return name in self._newFnMetaByName or name in self._fnMetaByName
 
@@ -183,7 +173,7 @@ class SymbolTable:
         return name in self._newVMetaByName or name in self._vMetaByName
 
     def hasT(self, name):
-        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
+        raise NotYetImplemented()
 
     def noteGets(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -208,6 +198,392 @@ class SymbolTable:
             self._globalSets.add(name)
         else:
             raise ProgrammerError('Unknown scope "%s"' % scope)
+
+    def tMetaForBind(self, name):
+        raise NotImplementedError()
+
+    def tMetaForGet(self, name):
+        raise NotImplementedError()
+
+    def fOrVMetaForGet(self, name, scope):
+        if (m := self.fMetaForGet(name, scope)): return m
+        return self.vMetaForGet(name, scope)
+
+    def vMetaForBind(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def vMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            if m is Missing and context.catchImplicitParams and len(name) == 1:
+                m = self.defVMeta(name, TBI, scope)
+                self.implicitParams.append(name)
+            return m
+        elif scope == PARENT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == MODULE_SCOPE:
+            raise NotYetImplemented()
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def fMetaForBind(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newFnMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._fnMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def fMetaForGet(self, name, scope):
+        raise NotImplementedError()
+
+    def defVMeta(self, name, t, scope):
+        raise NotImplementedError()
+
+    def defFnMeta(self, name, t, scope):
+        raise NotImplementedError()
+
+    def defTMeta(self, name, t):
+        if name in self._globalSymTab._newTMetaByName or name in self._globalSymTab._tMetaByName: raise ProgrammerError()
+        self._globalSymTab._newTMetaByName[name] = t
+
+    def commitChanges(self):
+        # raise NotYetImplemented()
+        pass
+
+    def bindFn(self, name, fn):
+        if not self.hasF(name): raise ProgrammerError()
+        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, tvfunc, tvfamily, tcfunc, tcblock)) and fn != TBI:
+            raise ProgrammerError()
+        if self._globalSymTab is Missing: raise BonesScopeAccessError('Missing global scope')
+        if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
+        overload = self.getOverload(name, fn.numargs)
+        overload[fn.tArgs.types] = fn
+        return overload
+
+    def getOverload(self, name, numargs):
+        # MUSTDO merge the new ones with the old ones
+        return self.getFamily(name).getOverload(numargs)
+
+    def getFamily(self, name):
+        if (family := self._newFamilyByName.get(name, Missing)) is Missing:
+            self._newFamilyByName[name] = family = tvfamily.newForMutation(name=name)
+        return family
+
+    @property
+    def path(self):
+        raise NotImplementedError()
+
+    @property
+    def parentPath(self):
+        answer = ''
+        if self._lexicalParentSymTab is not Missing:
+            answer += self._lexicalParentSymTab.path
+        elif self._moduleSymTab is not Missing:
+            answer += self._moduleSymTab.path
+        return answer
+
+    def updateMetaType(self, name, currentMeta, t):
+        if isinstance(currentMeta, VMeta):
+            if self._newVMetaByName[name].t != TBI: raise ProgrammerError()
+            self._newVMetaByName[name] = VMeta(t, self)
+        elif isinstance(currentMeta, FnMeta):
+            self._newFnMetaByName[name] = FnMeta(t, self)
+        else:
+            raise ProgrammerError()
+
+    def changeVMetaToFnMeta(self, name):
+        oldT = self._newVMetaByName[name].t
+        assert oldT == TBI
+        del self._newVMetaByName[name]
+        self.defFnMeta(name, TBI, LOCAL_SCOPE)
+        return self._newFnMetaByName[name]
+
+    def changeFnMetaToVMeta(self, name):
+        oldT = self._newFnMetaByName[name].t
+        assert oldT == TBI
+        del self._newFnMetaByName[name]
+        self.defVMeta(name, TBI, LOCAL_SCOPE)
+        return self._newVMetaByName[name]
+
+
+        
+class GlobalSymTab(_SymTab):
+    __slots__ = []
+
+    def __init__(self, name):
+        super().__init__(name)
+        
+    def __repr__(self):
+        return f'GlobalSymTab<{self.path}>'
+
+    @property
+    def path(self):
+        return self.name
+
+    def hasT(self, name):
+        return (name in self._newTMetaByName) or (name in self._tMetaByName)
+
+    def tMetaForBind(self, name):
+        m = self._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._tMetaByName.get(name, Missing)
+        return m
+
+    def tMetaForGet(self, name):
+        raise NotImplementedError()
+
+    def fMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newFnMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._fnMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def defVMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            currentMeta = self._newVMetaByName.get(name, Missing)
+            if currentMeta is Missing: currentMeta = self._vMetaByName.get(name, Missing)
+            if currentMeta is not Missing and currentMeta.t != t:
+                raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            if name in self._newFnMetaByName or name in self._fnMetaByName:
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
+            meta = VMeta(t, self)
+            self._newVMetaByName[name] = meta
+            return meta
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def defFnMeta(self, name, t, scope):
+        raise BonesScopeAccessError('Can\'t define function in global scope')
+
+
+
+class CtxSymTab(_SymTab):  # as soon as we access a contextual scope we need analysis / code gen for each situation
+    __slots__ = ['_enclosingSymTab']
+
+    def __init__(self, enclosingSt):
+        super().__init__('Ctx')
+        _enclosingSymTab = enclosingSt
+
+    def __repr__(self):
+        return f'CtxSymTab<{self.path}>'
+
+    @property
+    def path(self):
+        return self.name
+
+    def tMetaForBind(self, name):
+        raise BonesScopeAccessError('Can\'t define type in contextual scope')
+
+    def tMetaForGet(self, name):
+        raise NotImplementedError()
+
+    def fMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newFnMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._fnMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def defVMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            currentMeta = self._newVMetaByName.get(name, Missing)
+            if currentMeta is Missing: currentMeta = self._vMetaByName.get(name, Missing)
+            if currentMeta is not Missing and currentMeta.t != t:
+                raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            if name in self._newFnMetaByName or name in self._fnMetaByName:
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
+            meta = VMeta(t, self)
+            self._newVMetaByName[name] = meta
+            return meta
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def defFnMeta(self, name, t, scope):
+        raise BonesScopeAccessError('Can\'t define function in contextual scope')
+
+
+
+class ModSymTab(_SymTab):
+    __slots__ = ['_globalSymTab', '_contextSymTab']
+
+    def __init__(self, name, globalSt):
+        super().__init__(name)
+        self._globalSymTab = globalSt
+        self._contextSymTab = CtxSymTab(self)
+
+    def __repr__(self):
+        return f'ModSymTab<{self.path}>'
+
+    @property
+    def path(self):
+        return self.name
+
+    @property
+    def _moduleSymTab(self):
+        return self
+
+    def hasT(self, name):
+        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
+
+    def tMetaForBind(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
+
+    def tMetaForGet(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
+
+    def vMetaForBind(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
+            return m
+        else:
+            raise ProgrammerError()
+
+    def vMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            if m is Missing and context.catchImplicitParams and len(name) == 1:
+                m = self.defVMeta(name, TBI, scope)
+                self.implicitParams.append(name)
+            return m
+        elif scope == PARENT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == MODULE_SCOPE:
+            raise NotYetImplemented()
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
+            return m
+
+    def fMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newFnMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._fnMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+    def defVMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            currentMeta = self._newVMetaByName.get(name, Missing)
+            if currentMeta is Missing: currentMeta = self._vMetaByName.get(name, Missing)
+            if currentMeta is not Missing and currentMeta.t != t:
+                raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            if name in self._newFnMetaByName or name in self._fnMetaByName:
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
+            meta = VMeta(t, self)
+            self._newVMetaByName[name] = meta
+            return meta
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            if name in self._globalSymTab._vMetaByName or name in self._globalSymTab._newVMetaByName: raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            meta = VMeta(t, self._globalSymTab)
+            self._globalSymTab._newVMetaByName[name] = meta
+            return meta
+        else:
+            raise ProgrammerError()
+
+    def defFnMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
+            if name not in self._fnMetaByName or name not in self._newFnMetaByName:
+                self._newFnMetaByName[name] = FnMeta(t, self)
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
+
+
+
+# at the moment we intend to pass .x on the stack (possibly by register) rather than as a closure (which requires
+# memory access for sure), _lexicalParentSymTab is needed for analysis
+class FnSymTab(_SymTab):
+    __slots__ = ['_globalSymTab', '_moduleSymTab', '_lexicalParentSymTab', '_contextSymTab']
+
+    def __init__(self, name, globalSt, moduleSt, lexicalParentSt):
+        super().__init__(name)
+        self._globalSymTab = globalSt
+        self._moduleSymTab = moduleSt
+        self._lexicalParentSymTab = lexicalParentSt
+        self._contextSymTab = CtxSymTab(self)
+
+    def __repr__(self):
+        return f'FnSymTab<{self.path}>'
+
+    @property
+    def path(self):
+        answer = ''
+        if self._lexicalParentSymTab is not Missing:
+            answer += self._lexicalParentSymTab.path
+        elif self._moduleSymTab is not Missing:
+            answer += self._moduleSymTab.path
+        return self.name if answer == '' else answer + '.' + self.name
+
+    def hasT(self, name):
+        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
+
+    def tMetaForBind(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
+
+    def tMetaForGet(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
 
     def vMetaForGet(self, name, scope):
         if scope == LOCAL_SCOPE:
@@ -243,24 +619,11 @@ class SymbolTable:
         else:
             raise ProgrammerError()
 
-    def tMetaForGet(self, name):
-        m = self._globalSymTab._newTMetaByName.get(name, Missing)
-        if m is Missing:
-            m = self._globalSymTab._tMetaByName.get(name, Missing)
-        return m
-
-    def fOrVMetaForGet(self, name, scope):
-        if (m := self.fMetaForGet(name, scope)): return m
-        return self.vMetaForGet(name, scope)
-
-
     def vMetaForBind(self, name, scope):
         if scope == LOCAL_SCOPE:
             m = self._newVMetaByName.get(name, Missing)
             if m is Missing:
                 m = self._vMetaByName.get(name, Missing)
-            if m in self.parsing.inferredArgnames:
-                raise ProgrammerError(f'{name} has already been inferred as an argname')
             return m
         elif scope == CONTEXT_SCOPE:
             raise NotYetImplemented()
@@ -269,23 +632,6 @@ class SymbolTable:
             return m
         else:
             raise ProgrammerError()
-
-    def fMetaForBind(self, name, scope):
-        if scope == LOCAL_SCOPE:
-            m = self._newFnMetaByName.get(name, Missing)
-            if m is Missing:
-                m = self._fnMetaByName.get(name, Missing)
-            return m
-        elif scope == CONTEXT_SCOPE:
-            raise NotYetImplemented()
-        else:
-            raise ProgrammerError()
-
-    def tMetaForBind(self, name):
-        m = self._globalSymTab._newTMetaByName.get(name, Missing)
-        if m is Missing:
-            m = self._globalSymTab._tMetaByName.get(name, Missing)
-        return m
 
     def defVMeta(self, name, t, scope):
         if scope == LOCAL_SCOPE:
@@ -310,7 +656,6 @@ class SymbolTable:
             raise ProgrammerError()
 
     def defFnMeta(self, name, t, scope):
-        if self._globalSymTab is Missing: raise BonesScopeAccessError('Can\'t define function in global scope')
         if scope == LOCAL_SCOPE:
             if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
             if name not in self._fnMetaByName or name not in self._newFnMetaByName:
@@ -320,33 +665,20 @@ class SymbolTable:
         else:
             raise ProgrammerError()
 
-    def defTMeta(self, name, t):
-        if name in self._globalSymTab._newTMetaByName or name in self._globalSymTab._tMetaByName: raise ProgrammerError()
-        self._globalSymTab._newTMetaByName[name] = t
 
 
-    def commitChanges(self):
-        # raise NotYetImplemented()
-        pass
+class BlockSymTab(_SymTab):
+    __slots__ = ['_globalSymTab', '_moduleSymTab', '_lexicalParentSymTab', '_contextSymTab']
 
-    def bindFn(self, name, fn):
-        if not self.hasF(name): raise ProgrammerError()
-        if not isinstance(fn, (jones._nullary, jones._unary, jones._binary, jones._ternary, _tvfunc, Family, tcfunc, tcblock)) and fn != TBI:
-            raise ProgrammerError()
-        if self._globalSymTab is Missing: raise BonesScopeAccessError('Missing global scope')
-        if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
-        overload = self.getOverload(name, fn.numargs)
-        overload[fn.tArgs] = fn
-        return overload
+    def __init__(self, name, globalSt, moduleSt, lexicalParentSt):
+        super().__init__(name)
+        self._globalSymTab = globalSt
+        self._moduleSymTab = moduleSt
+        self._lexicalParentSymTab = lexicalParentSt
+        self._contextSymTab = lexicalParentSt._contextSymTab
 
-    def getOverload(self, name, numargs):
-        # MUSTDO merge the new ones with the old ones
-        return self.getFamily(name).getOverload(numargs)
-
-    def getFamily(self, name):
-        if (family := self._newFamilyByName.get(name, Missing)) is Missing:
-            self._newFamilyByName[name] = family = Family.newForMutation(name=name)
-        return family
+    def __repr__(self):
+        return f'BlockSymTab<{self.path}>'
 
     @property
     def path(self):
@@ -357,66 +689,111 @@ class SymbolTable:
             answer += self._moduleSymTab.path
         return self.name if answer == '' else answer + '.' + self.name
 
-    @property
-    def parentPath(self):
-        answer = ''
-        if self._lexicalParentSymTab is not Missing:
-            answer += self._lexicalParentSymTab.path
-        elif self._moduleSymTab is not Missing:
-            answer += self._moduleSymTab.path
-        return answer
+    def hasT(self, name):
+        return (name in self._globalSymTab._newTMetaByName) or (name in self._globalSymTab._tMetaByName)
 
-    def __repr__(self):
-        return f'SymbolTable<{self.path}>'
+    def tMetaForBind(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
 
-    def updateMetaType(self, name, currentMeta, t):
-        if isinstance(currentMeta, VMeta):
-            if self._newVMetaByName[name].t != TBI: raise ProgrammerError()
-            self._newVMetaByName[name] = VMeta(t, self)
-        elif isinstance(currentMeta, FnMeta):
-            self._newFnMetaByName[name] = FnMeta(t, self)
+    def tMetaForGet(self, name):
+        m = self._globalSymTab._newTMetaByName.get(name, Missing)
+        if m is Missing:
+            m = self._globalSymTab._tMetaByName.get(name, Missing)
+        return m
+
+    def vMetaForBind(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
+            return m
         else:
             raise ProgrammerError()
 
-    def changeVMetaToFnMeta(self, name):
-        oldT = self._newVMetaByName[name].t
-        assert oldT == TBI
-        del self._newVMetaByName[name]
-        self.defFnMeta(name, TBI, LOCAL_SCOPE)
-        return self._newFnMetaByName[name]
+    def vMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newVMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._vMetaByName.get(name, Missing)
+            if m is Missing and context.catchImplicitParams and len(name) == 1:
+                m = self.defVMeta(name, TBI, scope)
+                self.implicitParams.append(name)
+            return m
+        elif scope == PARENT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == MODULE_SCOPE:
+            raise NotYetImplemented()
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            m = self._globalSymTab.vMetaForGet(name, LOCAL_SCOPE)
+            return m
 
-    def changeFnMetaToVMeta(self, name):
-        oldT = self._newFnMetaByName[name].t
-        assert oldT == TBI
-        del self._newFnMetaByName[name]
-        self.defVMeta(name, TBI, LOCAL_SCOPE)
-        return self._newVMetaByName[name]
+    def fMetaForGet(self, name, scope):
+        if scope == LOCAL_SCOPE:
+            m = self._newFnMetaByName.get(name, Missing)
+            if m is Missing:
+                m = self._fnMetaByName.get(name, Missing)
+            if m is Missing and self._lexicalParentSymTab is not Missing:
+                m = self._lexicalParentSymTab.fMetaForGet(name, LOCAL_SCOPE)         # this will go all the way up to the module
+            if m is Missing and self._moduleSymTab is not Missing:
+                m = self._moduleSymTab.fMetaForGet(name, LOCAL_SCOPE)
+            return m
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
 
+    def defVMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            currentMeta = self._newVMetaByName.get(name, Missing)
+            if currentMeta is Missing: currentMeta = self._vMetaByName.get(name, Missing)
+            if currentMeta is not Missing and currentMeta.t != t:
+                raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            if name in self._newFnMetaByName or name in self._fnMetaByName:
+                self.changeFnMetaToVMeta(name)      # change the fn meta to a value meta
+                # raise NotYetImplemented("A name can only refer to a value or an fn")
+            meta = VMeta(t, self)
+            self._newVMetaByName[name] = meta
+            return meta
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        elif scope == GLOBAL_SCOPE:
+            if name in self._globalSymTab._vMetaByName or name in self._globalSymTab._newVMetaByName: raise NotYetImplemented("Can't merge or redefine the types of values yet")
+            meta = VMeta(t, self._globalSymTab)
+            self._globalSymTab._newVMetaByName[name] = meta
+            return meta
+        else:
+            raise ProgrammerError()
 
-class GlobalScope(SymbolTable):
-    pass
+    def defFnMeta(self, name, t, scope):
+        if scope == LOCAL_SCOPE:
+            if name in self._vMetaByName or name in self._newVMetaByName: raise BonesScopeAccessError('A name can only refer to a value or an fn')
+            if name not in self._fnMetaByName or name not in self._newFnMetaByName:
+                self._newFnMetaByName[name] = FnMeta(t, self)
+        elif scope == CONTEXT_SCOPE:
+            raise NotYetImplemented()
+        else:
+            raise ProgrammerError()
 
-class ModuleScope(SymbolTable):
-    pass
-
-class ContextualScope(SymbolTable):
-    pass
-
-class FunctionScope(SymbolTable):
-    pass
-
-class BlockScope(SymbolTable):
-    pass
 
 
 def fnSymTab(lexicalParentSt):
-    if lexicalParentSt._globalSymTab is Missing:
-        raise ProgrammerError()
-    return SymbolTable(lexicalParentSt.kernel, lexicalParentSt, lexicalParentSt._contextSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt._globalSymTab, Missing)
+    return FnSymTab(Missing, lexicalParentSt._globalSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt)
+
+
 
 def blockSymTab(lexicalParentSt):
-    # OPEN: implement properly - args are local all others are shared
-    return lexicalParentSt
+    return BlockSymTab(Missing, lexicalParentSt._globalSymTab, lexicalParentSt._moduleSymTab, lexicalParentSt)
+
 
 
 InferringHelper = collections.namedtuple('InferringHelper', ['typeVariables', 'fnVariables'])
