@@ -10,9 +10,7 @@
 import collections, itertools
 from collections import namedtuple
 from bones import jones
-from bones.core.context import context
-from bones.core.sentinels import Missing
-from bones.core.errors import NotYetImplemented, ProgrammerError
+from coppertop.core import context, Missing, NotYetImplemented, ProgrammerError
 from bones.kernel.errors import BonesScopeAccessError
 from bones.lang.types import TBI
 from bones.kernel.tc import tcfunc, tcblock

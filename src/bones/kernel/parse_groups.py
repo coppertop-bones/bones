@@ -234,9 +234,8 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 from coppertop.pipe import coppertop
 from coppertop.dm.pp import PP, EE
 
-from bones.core.sentinels import Missing
-from bones.core.errors import ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, NotYetImplemented, \
-    ErrSite
+from coppertop.core import Missing, ProgrammerError, UnhappyWomble, PathNotTested, handlersByErrSiteId, \
+    NotYetImplemented, ErrSite
 from bones.kernel.errors import BonesGroupingError
 from bones.kernel.tc import tcnode
 from bones.kernel._core import LOCAL_SCOPE, PARENT_SCOPE, MODULE_SCOPE, CONTEXT_SCOPE, GLOBAL_SCOPE

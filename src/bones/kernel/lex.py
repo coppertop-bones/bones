@@ -12,9 +12,8 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 import re, collections, itertools
-from bones.core.errors import ProgrammerError, ErrSite, handlersByErrSiteId, NotYetImplemented
+from coppertop.core import ProgrammerError, ErrSite, handlersByErrSiteId, NotYetImplemented, Missing
 from bones.kernel.errors import BonesLexError
-from bones.core.sentinels import Missing
 
 
 _tagIdSeed = itertools.count(start=0)

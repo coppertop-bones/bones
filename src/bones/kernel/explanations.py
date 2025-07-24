@@ -10,7 +10,7 @@
 # for the moment we'll hand-code src to descriptions - over time I think this will expand
 # the purpose is to make bones accessible to people as opposed to programmers
 
-from bones.core.sentinels import Missing
+from coppertop.core import Missing
 
 
 

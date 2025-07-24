@@ -11,8 +11,9 @@ import itertools, sys, collections
 
 from bones import jones
 
-from bones.core.errors import handlersByErrSiteId, ErrSite
-from bones.core.context import context
+from coppertop.core import context, NotYetImplemented, ProgrammerError, Missing, Void
+
+from coppertop.core import handlersByErrSiteId, ErrSite
 from bones.kernel.errors import BonesIncompatibleTypesError, BonesModuleImportError
 from bones.kernel import lex
 from bones.kernel import parse_phrase, parse_groups
@@ -28,12 +29,8 @@ from bones.kernel.contextual_scope_manager import ContextualScopeManager
 from bones.kernel.tc import tcfromimport, tcbindval, tcapply, tcgetval, tcfunc, tclit, tcbindfn, tcgetfamily, \
     tcgetoverload, tclitstruct, tclittup, tclitbtype, tcblock, TcReport
 from bones.kernel._core import MODULE_SCOPE
-from bones.core.sentinels import Missing, Void
-from bones.core.errors import NotYetImplemented, ProgrammerError
 from bones.ts.metatypes import BTTuple, updateSchemaVarsWith, fitsWithin, BType, BTypeError
-from bones.core.context import context
 from bones.ts.select import _typeOf, tvoverload, tvfunc, tvfamily
-import bones.kernel.tc
 
 
 pace_res = collections.namedtuple('pace_res', 'tokens, types, result, error')

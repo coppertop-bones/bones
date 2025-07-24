@@ -7,7 +7,7 @@
 # License. See the NOTICE file distributed with this work for additional information regarding copyright ownership.
 # **********************************************************************************************************************
 
-from bones.core.sentinels import Missing
+from coppertop.core import Missing
 
 
 

@@ -21,10 +21,7 @@ import sys
 if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 import itertools, collections
-from bones.core.sentinels import Missing
-from bones.core.context import context
-from bones.core.errors import ProgrammerError, NotYetImplemented, handlersByErrSiteId
-from bones.core.utils import assertIs
+from coppertop.core import Missing, context, ProgrammerError, NotYetImplemented, handlersByErrSiteId, assertIs
 from bones.ts.metatypes import BType, BTFn, BTTuple
 from bones.lang.types import void, TBI, nullary
 from bones.kernel._core import LOCAL_SCOPE, RET_VAR_NAME
@@ -167,13 +164,13 @@ class tcfunc(tcblock):
         self.literalstyle = literalstyle
     def __call__(self, *args, **kwargs):
         # this allows the function to be called as a normal function from Python
-        frame = context.k.pushFrame(self.symtab)
+        frame = context.kernel.pushFrame(self.symtab)
         for name, arg in zip(self.argnames, args):
-            context.k.bind(frame.symtab, LOCAL_SCOPE, name, arg)
+            context.kernel.bind(frame.symtab, LOCAL_SCOPE, name, arg)
         for n2 in self.body:
-            val = context.k.tcrunner.ex(n2)
-        if (ret := context.k.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
-        context.k.popFrame()
+            val = context.kernel.ex(n2)
+        if (ret := context.kernel.getReturn(frame.symtab, LOCAL_SCOPE, RET_VAR_NAME)) is Missing: ret = val
+        context.kernel.popFrame()
         return ret
     def ppSig(self):
         nameTs = [f'{name}:{t}' for name, t in zip(self.argnames, self.tArgs)]
