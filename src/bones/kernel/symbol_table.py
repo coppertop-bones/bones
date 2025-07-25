@@ -129,8 +129,7 @@ class _SymTab:
         'name',
         '_vMetaByName', '_fnMetaByName', '_tMetaByName', '_overloadsByNumArgs',
         '_newVMetaByName', '_newFnMetaByName', '_newTMetaByName', '_newFamilyByName',
-        'implicitParams', 'inferring', '_localGets', '_parentGets', '_moduleGets', '_contextGets',
-        '_globalGets', '_localSets', '_contextSets', '_globalSets'
+        'implicitParams', 'inferring'
     ]
 
     # @property
@@ -154,15 +153,6 @@ class _SymTab:
         self.implicitParams = []
         self.inferring = InferringHelper([], [])
 
-        self._localGets = set()
-        self._parentGets = set()
-        self._moduleGets = set()
-        self._contextGets = set()
-        self._globalGets = set()
-        self._localSets = set()
-        self._contextSets = set()
-        self._globalSets = set()
-
 
     def hasF(self, name):
         return name in self._newFnMetaByName or name in self._fnMetaByName
@@ -172,30 +162,6 @@ class _SymTab:
 
     def hasT(self, name):
         raise NotYetImplemented()
-
-    def noteGets(self, name, scope):
-        if scope == LOCAL_SCOPE:
-            self._localGets.add(name)
-        elif scope == PARENT_SCOPE:
-            self._parentGets.add(name)
-        elif scope == MODULE_SCOPE:
-            self._moduleGets.add(name)
-        elif scope == CONTEXT_SCOPE:
-            self._contextGets.add(name)
-        elif scope == GLOBAL_SCOPE:
-            self._globalGets.add(name)
-        else:
-            raise ProgrammerError('Unknown scope "%s"' % scope)
-
-    def noteSets(self, name, scope):
-        if scope == LOCAL_SCOPE:
-            self._localSets.add(name)
-        elif scope == CONTEXT_SCOPE:
-            self._contextSets.add(name)
-        elif scope == GLOBAL_SCOPE:
-            self._globalSets.add(name)
-        else:
-            raise ProgrammerError('Unknown scope "%s"' % scope)
 
     def tMetaForBind(self, name):
         raise NotImplementedError()

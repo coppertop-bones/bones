@@ -507,7 +507,6 @@ class _Group:
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
                 raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
-            self.symtab.noteSets(tokenOrGroup.src, LOCAL_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is CONTEXT_BIND_RIGHT:
@@ -515,7 +514,6 @@ class _Group:
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
                 raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
-            self.symtab.noteSets(tokenOrGroup.src, CONTEXT_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is GLOBAL_BIND_RIGHT:
@@ -523,27 +521,21 @@ class _Group:
             if not self._tokens:
                 msg = f'":{tokenOrGroup.src}" (AssignRight) is not allowed at start of phrase ({tokenOrGroup.l1}:{tokenOrGroup.l2})'
                 raise BonesGroupingError(msg, ErrSite(self.__class__, "assign right"), self, tokenOrGroup)
-            self.symtab.noteSets(tokenOrGroup.src, GLOBAL_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is NAME:
-            self.symtab.noteGets(tokenOrGroup.src, LOCAL_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is PARENT_VALUE_NAME:                 # .name
-            self.symtab.noteGets(tokenOrGroup.src[1:], PARENT_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is MODULE_VALUE_NAME:                 # ..name
-            self.symtab.noteGets(tokenOrGroup.src[2:], MODULE_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
         elif tokenOrGroup.tag is CONTEXT_NAME:                      # _.name
-            self.symtab.noteGets(tokenOrGroup.src[2:], CONTEXT_SCOPE)
             self._appendToken(tokenOrGroup, indent)
 
-        elif tokenOrGroup.tag is GLOBAL_NAME:
-            self.symtab.noteGets(tokenOrGroup.src[3:], GLOBAL_SCOPE)         # _..name
+        elif tokenOrGroup.tag is GLOBAL_NAME:                       # _..name
             self._appendToken(tokenOrGroup, indent)
 
         else:
@@ -926,25 +918,16 @@ def _processAssigmentsInPhrase(phrase, exactlyOneNameInPhrase, group, tokenOrGro
         if isinstance(phrase[0], Token):
             if phrase[0].tag == BIND_LEFT:
                 # move first token to end
-                symtab.noteSets(phrase[0].src, LOCAL_SCOPE)
                 phrase = phrase[1:] + [toAssignRight(phrase[0])]
             elif phrase[0].tag == CONTEXT_BIND_LEFT:
                 # move first token to end
-                symtab.noteSets(phrase[0].src, CONTEXT_SCOPE)
                 phrase = phrase[1:] + [toContextAssignRight(phrase[0])]
             elif phrase[0].tag == GLOBAL_BIND_LEFT:
                 # move first token to end
-                symtab.noteSets(phrase[0].src, GLOBAL_SCOPE)
                 phrase = phrase[1:] + [toGlobalAssignRight(phrase[0])]
 
         elif isinstance(phrase[0], TupParenOrDestructureGrp) and phrase[0]._isDestructure:
             # move first token to end
-            for row in phrase[0].grid:
-                for tok in row:
-                    if tok[0].tag == NAME:
-                        symtab.noteSets(tok[0].src, LOCAL_SCOPE)
-                    else:
-                        raise NotYetImplemented()
             phrase = phrase[1:] + [phrase[0]]
 
         # if isinstance(phrase[0], TypelangGrp) and isinstance(phrase[1], Token):

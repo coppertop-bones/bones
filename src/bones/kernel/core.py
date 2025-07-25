@@ -455,8 +455,7 @@ class BonesKernel:
             return n
 
         elif isinstance(n, tcblock):
-            raise NotYetImplemented(f"tcblock {n}")
-            return blockctx(n, self.stack[-1])
+            return n
 
         elif isinstance(n, tcbindfn):
             # only needed to be done at parse time
