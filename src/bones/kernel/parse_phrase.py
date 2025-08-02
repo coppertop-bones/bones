@@ -15,7 +15,7 @@ if hasattr(sys, '_TRACE_IMPORTS') and sys._TRACE_IMPORTS: print(__name__)
 
 
 from coppertop.pipe import nullary, unary, binary, ternary
-from coppertop.core import ProgrammerError, NotYetImplemented, PathNotTested, ErrSite, Missing, context
+from coppertop.utils import ProgrammerError, NotYetImplemented, PathNotTested, ErrSite, Missing, context
 from bones.kernel._core import RET_VAR_NAME
 from bones.kernel.errors import BonesPhraseError, BonesUnknownNameError
 from bones.kernel.lex import Token, prettyNameByTag, \

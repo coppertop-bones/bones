@@ -11,9 +11,9 @@ import itertools, sys, collections
 
 from bones import jones
 
-from coppertop.core import context, NotYetImplemented, ProgrammerError, Missing, Void
+from coppertop.utils import context, NotYetImplemented, ProgrammerError, Missing, Void
 
-from coppertop.core import handlersByErrSiteId, ErrSite
+from coppertop.utils import handlersByErrSiteId, ErrSite
 from bones.kernel.errors import BonesIncompatibleTypesError, BonesModuleImportError
 from bones.kernel import lex
 from bones.kernel import parse_phrase, parse_groups

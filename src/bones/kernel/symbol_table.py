@@ -8,7 +8,9 @@
 # **********************************************************************************************************************
 
 import collections, itertools
-from collections import namedtuple
+
+from coppertop.utils import context, Missing, NotYetImplemented, ProgrammerError
+
 from bones import jones
 from coppertop.core import context, Missing, NotYetImplemented, ProgrammerError
 from bones.kernel.errors import BonesScopeAccessError
